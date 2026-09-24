@@ -4,7 +4,12 @@ from db import get_supabase
 sb = get_supabase()
 
 if 'user' not in st.session_state:
+    st.session_state.user = None
+
+if st.session_state.user is None:
+
     login_tab, signup_tab = st.tabs(['Log in', 'Sign up'])
+
     with login_tab:
         email = st.text_input('Email', type='email', key='login_email')
         pw = st.text_input('Password', type='password', key='login_pw')
@@ -40,7 +45,7 @@ st.write(f'Logged in as {st.session_state.user.email}')
 
 if st.button('Log Out'):
     sb.auth.sign_out()
-    del st.session_state['user']
+    st.session_state.user = None
     st.rerun()
 
 new = st.text_input('New Todo')
