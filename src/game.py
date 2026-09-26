@@ -286,6 +286,73 @@ with notes_tab:
 
     for note in notes:
         with st.container(border=True):
+            label = note['title'] or 'Note'
+            if is_dm:
+                if note['visible_to_players']:
+                    label += 'Visible to players'
+                else:
+                    label += 'DM Only'
+
+            st.markdown(f'**{label}**')
+            st.caption(f'Added {format_date(note['created_at'])}')
+            st.markdown(note['body'])
+            
+            if is_dm:
+                c1, c2, _ = st.columns([1, 1, 3])
+                if note['visible_to_players']:
+                    toggle_label = 'hide from players' 
+                else:
+                    toggle_label = 'Show to players'
+
+                if c1.button(toggle_label, key=f'vis_{note['id']}'):
+                    sb.table('game_notes').update(
+                        {'visible_to_players': not note['visible_to_players']}
+                    ).eq('id', note['id']).execute()
+                    st.rerun()
+                if c2.button('Delete', key=f'del_note_{note['id']}'):
+                    sb.table('game_notes').delete().eq('id', note['id']).execute()
+                    st.rerun()
 
 
+# Abilities
+with abilities_tab:
+    st.caption('Abilities players can choose for their characters.')
+    if is_dm:
+        with st.form('add_ability', clear_on_submit=True):
+            a_name = st.text_input('Ability Name')
+            a_desc = st.text_area('Description')
+            add_ability = st.form_submit_button('Add Ability')
+        if add_ability:
+            if not a_name.strip():
+                st.arror('Please enter an ability name')
+            else:
+                try:
+                    sb.table('abilites').insert({
+                        'game_id': game_id,
+                        'name': a_name.strip(),
+                        'description': a_desc.strip() or None,
+                    }).execute()
+                except Exception as err:
+                    st.arror(f'Could not add ability:{err}')
+                else:
+                    st.rerun()
 
+    abilities = (
+        sb.table('abilites')
+        .select('*')
+        .eq('game_id', game_id)
+        .order('name')
+        .execute().data
+    )
+    if not abilities:
+        st.caption('No abilites defined yet.')
+    for ability in abilities:
+        with st.container(border=True):
+            c1, c2 = st.columns([5, 1])
+            c1.markdown(f'**{ability['name']}**')
+            if ability.get('description'):
+                c1.write(ability['description'])
+            if is_dm and c2.button('Delete',key = f'del_ability_{ability['id']}'):
+                sb.table('abilities').delete().eq('id', ability['id']).execute()
+                st.rerun()
+                
