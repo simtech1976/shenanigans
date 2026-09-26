@@ -209,11 +209,11 @@ if is_dm:
                     col1, col2 = st.columns([3, 1])
                     col1.markdown(
                         f'**{character['name']}** ({player})  \n'
-                        f'Current Balance:{balances.get(c['id'], 0)} points'
+                        f'Current Balance:{balances.get(character['id'], 0)} points'
                         )
                     awards[character['id']] = col2.number_input(
                         'Points', min_value=-10, max_value=100, value=0, step=1,
-                        key=f'award_{c['id']}', label_visibility='collapsed'
+                        key=f'award_{character['id']}', label_visibility='collapsed'
                     )
 
                 give = st.form_submit_button('Award Character Points')
