@@ -125,3 +125,10 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
                 desc = st.text_area('Description (optional)')
                 order = st.number_input('Display Order', min_value=0, value=0)
                 add_skill = st.form_submit_button('Add Skill')
+            if add_skill:
+                if parent_id is None:
+                    st.error('Add a main stat first')
+                else:
+                    _add_stat(sb, game_id, parent_id, name, desc, order)
+
+        st.caption('Default stats are shared by every game, can only be edited from the DB')
