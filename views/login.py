@@ -1,5 +1,5 @@
 import streamlit as st
-from db import get_supabase
+from src.db import get_supabase
 
 sb = get_supabase()
 login_tab, signup_tab = st.tabs(['Log In', 'Sign Up'])

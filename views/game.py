@@ -1,6 +1,6 @@
 from datetime import datetime
 import streamlit as st
-from db import get_supabase, upload_game_image, delete_game_image, game_image_url
+from src.db import get_supabase, upload_game_image, delete_game_image, game_image_url
 
 sb = get_supabase()
 uid = st.session_state.user.id
