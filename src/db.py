@@ -31,12 +31,14 @@ def upload_game_image(game_id: int, uploaded_file) -> str:
     )
     return path
 
+
 def delete_game_image(path: str | None) -> None:
     if path:
         get_supabase().storage.from_(GAME_IMAGE).remove([path])
 
+
 def game_image_url(path: str | None) -> str | None:
-    """ Image URL, cahced per user session. """
+    """ Image URL, cached per user session. """
     if not path:
         return None
 
@@ -46,7 +48,8 @@ def game_image_url(path: str | None) -> str | None:
     # Testing for now, will refresh 5 minutes before image expires.
     if cached is None or time.time() - cached[1] > SIGNED_URL_SECONDS - 300:
         res = get_supabase().storage.from_(GAME_IMAGE).create_signed_url(
-            path, SIGNED_URL_SECONDS
+            path,
+            SIGNED_URL_SECONDS
         )
         cache[path] = (res.get('signedUrl') or res.get('signedURL'), time.time())
     return cache[path][0]
