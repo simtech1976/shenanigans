@@ -132,3 +132,13 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
                     _add_stat(sb, game_id, parent_id, name, desc, order)
 
         st.caption('Default stats are shared by every game, can only be edited from the DB')
+
+
+    # List
+    if not main_stats:
+        st.info('No stats.')
+    for m in main_stats:
+        with st.container(border=True):
+            head, ctrl = st.columns([6, 1])
+            icon = DEFAULT_ICON if m['game_id'] is None else CUSTOM_ICON
+            head
