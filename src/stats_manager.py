@@ -141,4 +141,23 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
         with st.container(border=True):
             head, ctrl = st.columns([6, 1])
             icon = DEFAULT_ICON if m['game_id'] is None else CUSTOM_ICON
-            head
+            head.markdown(f'#### {icon} {m["name"]}')
+            if m.get('description'):
+                head.caption(m['description'])
+            if is_dm and m['game_id'] is not None:
+                with ctrl:
+                    _edit_controls(sb, m, main_names)
+
+            subs = skills.get(m['id'], [])
+            if not subs:
+                st.caption('No Skills yet.')
+            for s in subs:
+                name_col, s_ctrl = st.columns([6, 1])
+                s_icon = DEFAULT_ICON if s['game_id'] is None else CUSTOM_ICON
+                text = f'{s_icon} {s["name"]}'
+                if s.get('decription'):
+                    text += f' · *{s["description"]}*'
+                name_col.markdown(text)
+                if is_dm and s['game_id'] is not None:
+                    with s_ctrl:
+                        _edit_controls(sb, s, main_names)
