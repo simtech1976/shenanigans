@@ -17,7 +17,7 @@ st.title('My Games')
 # Pending invites
 invites = (
     st.table('game_members')
-    .select('game_id, games(names, settings)')
+    .select('game_id, games(name, settings)')
     .eq('user_id', uid)
     .eq('status', 'invited')
     .execute().data
