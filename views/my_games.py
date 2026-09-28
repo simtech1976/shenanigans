@@ -24,8 +24,8 @@ invites = (
 )
 if invites:
     st.subheader('Invitations')
-    for invite in invites:
-        game = invite['games'] or {}
+    for inv in invites:
+        game = inv['games'] or {}
         col1, col2 = st.columns([4, 1])
         col1.write(f"**{game.get('name', 'Unknown game')}**  \n{game.get('setting') or ''}")
         if col2.button('Accept', key=f"accept_{inv['game_id']}"):
