@@ -1,6 +1,7 @@
 from datetime import datetime
 import streamlit as st
 from src.db import get_supabase, upload_game_image, delete_game_image, game_image_url
+from src.stats_manager import render_stats_tab
 
 sb = get_supabase()
 uid = st.session_state.user.id
@@ -37,13 +38,16 @@ with info_col:
     st.caption(f"{game.get('setting') or 'No setting'}" 
                f" | {DICE_LABELS[game['dice_system']]}"
                f"{' | You are the game master' if is_dm else ''}")
+    unit = 'die' if game['dice_system'] == 'd6' else 'points of current value'
+    st.caption(f"Upgrade cost per pip:{game.get('skill_pip_cost', 1)} x {unit} for skills, "
+        f"{game.get('main_pip_cost', 10)} x {unit} for main stats")
     if game.get('description'):
         st.markdown(game['description'])
 
 
 # edit game (DM)
 if is_dm:
-    with st.expander('Edit game details'):
+    with st.expander('Edit Game Details'):
         with st.form('edit_game'):
             name = st.text_input('Game name', value=game['name'])
             settings = st.text_input('Settings', value=game.get('settings') or '')
@@ -55,7 +59,17 @@ if is_dm:
                 value = game.get('starting_skill_points') or 0,
                 steps =1
                 )
-            
+
+            cost_col1, cost_col2 = st.columns(2)
+            skill_cost = cost_col1.number_input(
+                'Skill cost per die *per pip', min_value=0, max_value=100,
+                value=game.get('skill_pip_cost', 1), step=1
+                )
+            main_cost = cost_col2.number_input(
+                'Main stat cost per doe *per pip', min_value=0, max_value=100,
+                value=game.get('main_pip_cost', 10), step=1
+                )
+                        
             player_edit = st.checkbox(
                 'Players can edit their own character sheets',
                 value = bool(game.get('playersd_can_edit_sheets'))
@@ -83,6 +97,8 @@ if is_dm:
                     'settings': settings.strip() or None,
                     'starting_skill_points': int(starting_points),
                     'player_can_edit_sheets': player_edit,
+                    'skill_pip_cost': int(skill_cost),
+                    'main_pip_cost': int(main_cost),
                     'description': description.strip() or None
                     }
 
@@ -150,7 +166,12 @@ activity_notifications()
 
 tab_names = ['Notes', 'Abilities', 'Activity'] + (['Award Points'] if is_dm else[])
 tabs = st.tabs(tab_names)
-notes_tab, abilities_tab, activity_tab = tabs[0], tabs[2], tabs[2]
+notes_tab, stats_tab, abilities_tab, activity_tab = tabs[0], tabs[1], tabs[2], tabs[2]
+
+
+# Stats and Skills
+with stats_tab:
+    render_stats_tab(sb, game_id, is_dm)
 
 
 # Activity feed
@@ -179,7 +200,7 @@ with activity_tab:
 
 # DM: Awarded points at the end of a session
 if is_dm:
-    with tabs[3]:
+    with tabs[4]:
         characters = (
             sb.table('characters')
             .select('id, name, owner_id, profiles(username)')
@@ -203,9 +224,7 @@ if is_dm:
                 reason = st.text_input('Session / Reason', placeholder='e.g. Combat/investigaiton')
                 awards = {}
                 for character in characters:
-                    player = (
-                        character.get('profiles') or {}).get('username', 'unknown'
-                    )
+                    player = (character.get('profiles') or {}).get('username', 'unknown')
                     col1, col2 = st.columns([3, 1])
                     col1.markdown(
                         f'**{character['name']}** ({player})  \n'

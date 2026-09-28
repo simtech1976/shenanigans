@@ -87,7 +87,7 @@ def _edit_controls(sb, stat, main_names: dict):
                     st.rerun()
 
         st.divider()
-        st.caption('Deleting Main stat also deletes sub-stats/skills for all characters!' if is_main else
+        st.caption('Deleting main stat also deletes sub-stats/skills for all characters!' if is_main else
                    'Deleting the skill also removes from every character sheet!')
         confirm = st.button('Delete', key=f'confirm_del_stat_{stat['id']}')
         if st.button('Deelte', key=f'del_stat{stat['id']}', type='primary', disabled=not confirm):
