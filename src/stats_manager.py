@@ -12,7 +12,7 @@ def load_stats(sb, game_id: int):
     rows = (
         sb.table('stat_definitions')
         .select('*')
-        .or_(f'game_id.is.null.game_id.eq.{game_id}')
+        .or_(f'game_id.is.null, game_id.eq.{game_id}')
         .order('sort_order')
         .order('name')
         .execute().data
@@ -56,7 +56,7 @@ def _edit_controls(sb, stat, main_names: dict):
     """ Edit popover for one of the game's own stats. """
 
     is_main = stat['parent_id'] is None
-    with st.popoever('Edit'):
+    with st.popover('Edit'):
         with st.form(f'edit_stat_{stat['id']}'):
             name = st.text_input('Name', value=stat['name'])
             desc = st.text_area('Description', value=stat.get('description') or '')
@@ -68,7 +68,7 @@ def _edit_controls(sb, stat, main_names: dict):
                     'Main Stat', ids, format_func=main_names.get,
                     index=ids.index(parent_id) if parent_id in ids else 0
                 )
-                save = st.form_submit_button('Save')
+            save = st.form_submit_button('Save')
 
         if save:
             if not name.strip():

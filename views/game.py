@@ -24,7 +24,7 @@ is_dm = game['dm_id'] == uid
 
 
 def format_date(iso: str) -> str:
-    return datetime.fromisoformat(iso).strtime('%d %b %Y, %H:%M')
+    return datetime.fromisoformat(iso).strftime('%d %b %Y, %H:%M')
 
 
 # Header
@@ -50,14 +50,14 @@ if is_dm:
     with st.expander('Edit Game Details'):
         with st.form('edit_game'):
             name = st.text_input('Game name', value=game['name'])
-            settings = st.text_input('Settings', value=game.get('settings') or '')
+            game_setting = st.text_input('Setting', value=game.get('setting') or '')
             
             starting_points = st.number_input(
                 'Starting skill points for new characters',
                 min_value = 0,
                 max_value = 1000,
                 value = game.get('starting_skill_points') or 0,
-                steps =1
+                step = 1
                 )
 
             cost_col1, cost_col2 = st.columns(2)
@@ -93,10 +93,10 @@ if is_dm:
             
             try:
                 updates = {
-                    'naame': name.strip() or game['name'],
-                    'settings': settings.strip() or None,
+                    'name': name.strip() or game['name'],
+                    'setting': game_setting.strip() or None,
                     'starting_skill_points': int(starting_points),
-                    'player_can_edit_sheets': player_edit,
+                    'players_can_edit_sheets': player_edit,
                     'skill_pip_cost': int(skill_cost),
                     'main_pip_cost': int(main_cost),
                     'description': description.strip() or None
@@ -123,11 +123,11 @@ st.divider()
 def activity_notifications():
     """ Toast noficiations for other players"""
     
-    seen_key = f'activity_seen{game_id}'
+    seen_key = f'activity_seen_{game_id}'
     
     if seen_key not in st.session_state:
         me = (
-            st.table('game_members')
+            sb.table('game_members')
             .select('last_seen_activity_at')
             .eq('game_id', game_id)
             .eq('user_id', uid)
@@ -136,7 +136,7 @@ def activity_notifications():
         st.session_state[seen_key] = me[0]['last_seen_activity_at'] if me else None
 
     query = (
-        sb.table['game_activity']
+        sb.table('game_activity')
         .select('message, source, actor_id, created_at')
         .eq('game_id', game_id)
         .order('created_at')
@@ -144,7 +144,7 @@ def activity_notifications():
         )
 
     if st.session_state[seen_key]:
-        query = query.get('created_at', st.session_state[seen_key])
+        query = query.gt('created_at', st.session_state[seen_key])
 
     new_rows = query.execute().data
 
@@ -164,7 +164,7 @@ def activity_notifications():
 
 activity_notifications()
 
-tab_names = ['Notes', 'Abilities', 'Activity'] + (['Award Points'] if is_dm else[])
+tab_names = ['Notes', 'Stats & Skills', 'Abilities', 'Activity'] + (['Award Points'] if is_dm else[])
 tabs = st.tabs(tab_names)
 notes_tab, stats_tab, abilities_tab, activity_tab = tabs[0], tabs[1], tabs[2], tabs[2]
 
@@ -190,7 +190,7 @@ with activity_tab:
 
     for item in feed:
         icon = SOURCE_ICONS.get(item['source'], '🎲')
-        line = f'{icon} {item['message']} \n*{format_date[item['created_at']]}*'
+        line = f'{icon} {item['message']}  \n*{format_date(item['created_at'])}*'
 
         if item['source'] == 'direct':
             st.warning(line)
@@ -278,7 +278,7 @@ with notes_tab:
     if is_dm:
         with st.form('add_note', clear_on_submit=True):
             title = st.text_input('Title (optional)')
-            body = st.input_area('Note')
+            body = st.text_area('Note')
             visible = st.form_submit_button('Visible to players')
             add = st.form_submit_button('Add Note')
             if add:
@@ -357,7 +357,7 @@ with abilities_tab:
                     st.rerun()
 
     abilities = (
-        sb.table('abilites')
+        sb.table('abilities')
         .select('*')
         .eq('game_id', game_id)
         .order('name')
