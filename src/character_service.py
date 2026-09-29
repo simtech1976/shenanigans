@@ -1,6 +1,6 @@
 """ Load character data from Supabase and applied changes defined in rules.py """
-from rules import SheetStat, StatChange, build_sheet
-from stats_manager import load_stats
+from src.rules import SheetStat, StatChange, build_sheet
+from src.stats_manager import load_stats
 
 
 def load_sheet(sb, game: dict, character_id: int) -> list[tuple[SheetStat, list[SheetStat]]]:

@@ -1,8 +1,84 @@
 -- =====================================================================
--- RPG TABLES: complete database setup
--- It creates everything in its final form: tables, security rules,
--- functions, triggers, image storage and default stats.
+-- RPG TABLES: RESET AND REBUILD
+-- THIS PERMANENTLY DELETES ALL GAME DATA
+-- Games, characters, stats, notes, points, activity and uploaded
+-- images are removed, then the database is rebuilt from scratch.
+--
+-- User ACCOUNTS are kept (people can still log in, with their usernames);
+-- see the optional line in step R3 to delete accounts as well.
+--
+-- Runs as one transaction: if anything fails, NOTHING is changed.
+--
+-- If it stops asking you to empty the image bucket:
+--   Dashboard → Storage → game-images → select all files → Delete,
+--   then run this script again.
+-- =====================================================================
+ 
+begin;
 
+
+-- R1. UPLOADED IMAGES _________________________________________________
+do $$
+begin
+  if exists (select 1 from storage.buckets where id = 'game-images') then
+    begin
+      delete from storage.objects where bucket_id = 'game-images';
+    exception when others then
+      if exists (select 1 from storage.objects where bucket_id = 'game-images') then
+        raise exception using
+          message = 'Please empty the "game-images" storage bucket first, then run this script again. Nothing has been changed.',
+          hint = 'Dashboard → Storage → game-images → select all files → Delete. (Supabase blocks deleting files from SQL: ' || sqlerrm || ')';
+      end if;
+    end;
+ -- Remove the (now empty) bucket if allowed; otherwise it is reused below
+    begin
+      delete from storage.buckets where id = 'game-images';
+    exception when others then
+      null;
+    end;
+  end if;
+end $$;
+ 
+drop policy if exists "Members view game images" on storage.objects;
+drop policy if exists "DM uploads game images" on storage.objects;
+drop policy if exists "DM deletes game images" on storage.objects;
+ 
+
+-- R2. APP OBJECTS _____________________________________________________
+drop trigger if exists on_auth_user_created on auth.users;
+drop view if exists public.character_sheet_stats; -- from older versions
+drop view if exists public.character_point_balances;
+drop function if exists public.apply_stat_change(bigint, bigint, int, int, int, int, text);
+drop function if exists public.upgrade_stat(bigint, bigint); -- from older versions
+ 
+drop table if exists
+  public.game_activity,
+  public.point_transactions,
+  public.character_abilities,
+  public.abilities,
+  public.game_notes,
+  public.inventory_items,
+  public.character_spells,
+  public.spells,
+  public.character_stats,
+  public.characters,
+  public.stat_definitions,
+  public.game_members,
+  public.games,
+  public.profiles,
+  public.todos -- early test table
+cascade;
+ 
+drop type if exists public.dice_system, public.member_status, public.member_role cascade;
+ 
+drop schema if exists private cascade; -- all helper and trigger functions
+ 
+
+-- R3. OPTIONAL: DELETE ALL USER ACCOUNTS TOO __________________________
+delete from auth.users;
+ 
+
+-- REBUILD (identical to supabase_setup.sql) ___________________________
 create schema if not exists private;
 
 
@@ -10,22 +86,21 @@ create schema if not exists private;
 create type public.member_role as enum ('dm', 'player');
 create type public.member_status as enum ('invited', 'active');
 create type public.dice_system as enum ('d6', 'd20');
-
+ 
 
 -- 2. TABLES: Public profile for each user (username only) _____________
-
 create table public.profiles (
   id uuid primary key references auth.users on delete cascade,
   username text not null unique check (char_length(username) between 3 and 30),
   created_at timestamptz not null default now()
 );
-
+ 
 create table public.games (
   id bigint generated always as identity primary key,
   name text not null,
   setting text, -- e.g. 'Star Wars', 'Middle-earth'
   description text, -- Markdown
-  image_path text, -- path in the 'game-images'
+  image_path text, -- path in the 'game-images' bucket
   dice_system public.dice_system not null default 'd20',
   starting_skill_points int not null default 0 check (starting_skill_points >= 0),
   skill_pip_cost int not null default 1 check (skill_pip_cost >= 0), -- per die, per pip
@@ -34,7 +109,7 @@ create table public.games (
   dm_id uuid not null default auth.uid() references public.profiles on delete cascade,
   created_at timestamptz not null default now()
 );
-
+ 
 create table public.game_members (
   game_id bigint not null references public.games on delete cascade,
   user_id uuid not null references public.profiles on delete cascade,
@@ -44,7 +119,7 @@ create table public.game_members (
   created_at timestamptz not null default now(),
   primary key (game_id, user_id)
 );
-
+ 
 -- game_id null = default stat shared by every game
 -- parent_id null = main stat; otherwise a skill under that main stat
 create table public.stat_definitions (
@@ -55,13 +130,13 @@ create table public.stat_definitions (
   description text,
   sort_order int not null default 0,
   icon_emoji text check (char_length(icon_emoji) <= 16),
-  icon_path text -- uploaded icon, in the games own image folder
+  icon_path text -- uploaded icon, in the game's own image folder
     check (icon_path is null or (game_id is not null and icon_path like game_id || '/%')),
   created_at timestamptz not null default now()
 );
 create unique index stat_definitions_unique_name
   on public.stat_definitions (coalesce(game_id, 0), coalesce(parent_id, 0), lower(name));
-
+ 
 create table public.characters (
   id bigint generated always as identity primary key,
   game_id bigint not null references public.games on delete cascade,
@@ -71,7 +146,7 @@ create table public.characters (
   notes text,
   created_at timestamptz not null default now()
 );
-
+ 
 -- Main stat rows store the FULL value; skill rows store a BONUS above the
 -- main stat. A skill with no row equals its main stat. (Rules: rules.py)
 create table public.character_stats (
@@ -82,7 +157,7 @@ create table public.character_stats (
   value int not null default 0, -- used by D20 games (modifier)
   primary key (character_id, stat_id)
 );
-
+ 
 create table public.spells (
   id bigint generated always as identity primary key,
   game_id bigint not null references public.games on delete cascade,
@@ -93,13 +168,13 @@ create table public.spells (
   created_at timestamptz not null default now(),
   unique (game_id, name)
 );
-
+ 
 create table public.character_spells (
   character_id bigint not null references public.characters on delete cascade,
   spell_id bigint not null references public.spells on delete cascade,
   primary key (character_id, spell_id)
 );
-
+ 
 create table public.inventory_items (
   id bigint generated always as identity primary key,
   character_id bigint not null references public.characters on delete cascade,
@@ -108,7 +183,7 @@ create table public.inventory_items (
   quantity int not null default 1 check (quantity >= 0),
   created_at timestamptz not null default now()
 );
-
+ 
 create table public.game_notes (
   id bigint generated always as identity primary key,
   game_id bigint not null references public.games on delete cascade,
@@ -117,8 +192,8 @@ create table public.game_notes (
   visible_to_players boolean not null default false,
   created_at timestamptz not null default now()
 );
-
--- Traits a character has or doesn't
+ 
+-- Traits a character has or doesn't (e.g. Force Sensitive, Night Vision)
 create table public.abilities (
   id bigint generated always as identity primary key,
   game_id bigint not null references public.games on delete cascade,
@@ -129,13 +204,13 @@ create table public.abilities (
   created_at timestamptz not null default now(),
   unique (game_id, name)
 );
-
+ 
 create table public.character_abilities (
   character_id bigint not null references public.characters on delete cascade,
   ability_id bigint not null references public.abilities on delete cascade,
   primary key (character_id, ability_id)
 );
-
+ 
 -- Append-only points ledger: + awards, − spends
 create table public.point_transactions (
   id bigint generated always as identity primary key,
@@ -145,7 +220,7 @@ create table public.point_transactions (
   created_by uuid default auth.uid() references public.profiles on delete set null,
   created_at timestamptz not null default now()
 );
-
+ 
 -- Written only by triggers; visible to all members of the game
 create table public.game_activity (
   id bigint generated always as identity primary key,
@@ -157,7 +232,7 @@ create table public.game_activity (
   message text not null,
   created_at timestamptz not null default now()
 );
-
+ 
 -- Indexes on foreign keys (keeps security checks fast)
 create index on public.game_members (user_id);
 create index on public.stat_definitions (game_id);
@@ -173,28 +248,29 @@ create index on public.abilities (game_id);
 create index on public.character_abilities (ability_id);
 create index on public.point_transactions (character_id);
 create index on public.game_activity (game_id, created_at desc);
-
+ 
 
 -- 3. HELPER FUNCTIONS private schema: not callable through the API ____
-
 create function private.is_game_member(gid bigint)
 returns boolean language sql stable security definer set search_path = ''
 as $$
-  select exists (select 1 from public.game_members where game_id = gid and user_id = (select auth.uid()) and status = 'active');
+  select exists (select 1 from public.game_members
+                 where game_id = gid and user_id = (select auth.uid()) and status = 'active');
 $$;
-
+ 
 create function private.has_game_invite_or_membership(gid bigint)
 returns boolean language sql stable security definer set search_path = ''
 as $$
-  select exists (select 1 from public.game_members where game_id = gid and user_id = (select auth.uid()));
+  select exists (select 1 from public.game_members
+                 where game_id = gid and user_id = (select auth.uid()));
 $$;
-
+ 
 create function private.is_game_dm(gid bigint)
 returns boolean language sql stable security definer set search_path = ''
 as $$
   select exists (select 1 from public.games where id = gid and dm_id = (select auth.uid()));
 $$;
-
+ 
 -- Owner of the character, or DM of its game
 create function private.can_manage_character(cid bigint)
 returns boolean language sql stable security definer set search_path = ''
@@ -203,7 +279,7 @@ as $$
                  where c.id = cid
                    and (c.owner_id = (select auth.uid()) or private.is_game_dm(c.game_id)));
 $$;
-
+ 
 -- DM always; owner too when the game allows player editing
 create function private.can_edit_character_stats(cid bigint)
 returns boolean language sql stable security definer set search_path = ''
@@ -214,14 +290,14 @@ as $$
                    and (g.dm_id = (select auth.uid())
                         or (c.owner_id = (select auth.uid()) and g.players_can_edit_sheets)));
 $$;
-
+ 
 create function private.is_character_dm(cid bigint)
 returns boolean language sql stable security definer set search_path = ''
 as $$
   select exists (select 1 from public.characters c
                  where c.id = cid and private.is_game_dm(c.game_id));
 $$;
-
+ 
 create function private.stat_fits_character(sid bigint, cid bigint)
 returns boolean language sql stable security definer set search_path = ''
 as $$
@@ -229,7 +305,7 @@ as $$
                  join public.characters c on c.id = cid
                  where s.id = sid and (s.game_id is null or s.game_id = c.game_id));
 $$;
-
+ 
 create function private.spell_fits_character(spid bigint, cid bigint)
 returns boolean language sql stable security definer set search_path = ''
 as $$
@@ -237,7 +313,7 @@ as $$
                  join public.characters c on c.id = cid
                  where s.id = spid and s.game_id = c.game_id);
 $$;
-
+ 
 create function private.ability_fits_character(aid bigint, cid bigint)
 returns boolean language sql stable security definer set search_path = ''
 as $$
@@ -245,7 +321,7 @@ as $$
                  join public.characters c on c.id = cid
                  where a.id = aid and a.game_id = c.game_id);
 $$;
-
+ 
 -- Game id from a storage path like '12/abc.png' (null if not numeric)
 create function private.path_game_id(object_name text)
 returns bigint language sql immutable set search_path = ''
@@ -253,7 +329,7 @@ as $$
   select case when split_part(object_name, '/', 1) ~ '^[0-9]+$'
               then split_part(object_name, '/', 1)::bigint end;
 $$;
-
+ 
 -- Plain formatting for log messages: '4D+2' (D6) or '+5' (D20)
 create function private.fmt_stat(system public.dice_system, d int, p int, v int)
 returns text language sql immutable set search_path = ''
@@ -262,25 +338,25 @@ as $$
               then coalesce(d, 0) || 'D' || case when coalesce(p, 0) > 0 then '+' || p else '' end
               else case when coalesce(v, 0) >= 0 then '+' else '' end || coalesce(v, 0) end;
 $$;
-
+ 
 
 -- 4. TRIGGERS _________________________________________________________
 -- Profile for every new user (username from sign-up metadata)
-
 create function private.handle_new_user()
 returns trigger language plpgsql security definer set search_path = ''
 as $$
 begin
   insert into public.profiles (id, username)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'username', 'player_' || substr(new.id::text, 1, 8)));
+  values (new.id,
+          coalesce(new.raw_user_meta_data ->> 'username', 'player_' || substr(new.id::text, 1, 8)));
   return new;
 end;
 $$;
-
+ 
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function private.handle_new_user();
-
+ 
 -- Game creator becomes its DM member
 create function private.add_dm_as_member()
 returns trigger language plpgsql security definer set search_path = ''
@@ -291,11 +367,11 @@ begin
   return new;
 end;
 $$;
-
+ 
 create trigger on_game_created
   after insert on public.games
   for each row execute function private.add_dm_as_member();
-
+ 
 -- Stat hierarchy: two levels, and a skill's main stat must be default or same game
 create function private.check_stat_parent()
 returns trigger language plpgsql security definer set search_path = ''
@@ -318,11 +394,11 @@ begin
   return new;
 end;
 $$;
-
+ 
 create trigger check_stat_parent
   before insert or update on public.stat_definitions
   for each row execute function private.check_stat_parent();
-
+ 
 -- New characters receive the game's starting points
 create function private.grant_starting_points()
 returns trigger language plpgsql security definer set search_path = ''
@@ -338,11 +414,11 @@ begin
   return new;
 end;
 $$;
-
+ 
 create trigger on_character_created
   after insert on public.characters
   for each row execute function private.grant_starting_points();
-
+ 
 -- ---------- Safety-net log for stat changes made outside the app ----------
 -- Changes made through apply_stat_change() are logged there with the app's
 -- description; this trigger catches anything else (e.g. dashboard edits).
@@ -367,13 +443,13 @@ begin
   if nullif(current_setting('app.rpc_logging', true), '') is not null then
     return null; -- already logged by apply_stat_change()
   end if;
-
+ 
   if tg_op = 'DELETE' then
     v_cid := old.character_id; v_sid := old.stat_id;
   else
     v_cid := new.character_id; v_sid := new.stat_id;
   end if;
-
+ 
   select * into v_char from public.characters where id = v_cid;
   if not found then
     return null; -- character is being deleted
@@ -383,21 +459,21 @@ begin
     return null; -- stat definition is being deleted (logged separately)
   end if;
   select dice_system, dm_id into v_system, v_dm from public.games where id = v_char.game_id;
-
+ 
   if tg_op <> 'INSERT' then v_old := private.fmt_stat(v_system, old.dice, old.pips, old.value); end if;
   if tg_op <> 'DELETE' then v_new := private.fmt_stat(v_system, new.dice, new.pips, new.value); end if;
   if v_old is not distinct from v_new then
     return null;
   end if;
-
-  -- Stored values: full value for main stats, bonus for skills
+ 
+ -- Stored values: full value for main stats, bonus for skills
   v_what := v_stat.name || case when v_stat.parent_id is null then '' else ' bonus' end;
   v_change := case tg_op
     when 'INSERT' then 'set ' || v_what || ' to ' || v_new
     when 'DELETE' then 'cleared ' || v_what || ' (was ' || v_old || ')'
     else 'changed ' || v_what || ' from ' || v_old || ' to ' || v_new
   end;
-
+ 
   if v_actor = v_dm and v_actor is distinct from v_char.owner_id then
     v_msg := 'GM ' || v_change || ' for ' || v_char.name;
     v_source := 'gm';
@@ -405,17 +481,17 @@ begin
     v_msg := v_char.name || ' ' || v_change || ' (edited directly)';
     v_source := 'direct';
   end if;
-
+ 
   insert into public.game_activity (game_id, character_id, actor_id, kind, source, message)
   values (v_char.game_id, v_cid, v_actor, 'stat_change', v_source, v_msg);
   return null;
 end;
 $$;
-
+ 
 create trigger log_stat_change
   after insert or update or delete on public.character_stats
   for each row execute function private.log_stat_change();
-
+ 
 -- ---------- Log DM awards and corrections (spends are logged with their stat change) ----------
 create function private.log_points()
 returns trigger language plpgsql security definer set search_path = ''
@@ -430,9 +506,9 @@ begin
   if new.reason = 'Starting points' then
     return null;
   end if;
-
+ 
   select name, game_id into v_name, v_game from public.characters where id = new.character_id;
-
+ 
   insert into public.game_activity (game_id, character_id, actor_id, kind, source, message)
   values (v_game, new.character_id, new.created_by, 'points', 'award',
           case when new.amount > 0
@@ -442,11 +518,11 @@ begin
   return null;
 end;
 $$;
-
+ 
 create trigger log_points
   after insert on public.point_transactions
   for each row execute function private.log_points();
-
+ 
 -- Log when the GM adds, renames, moves or removes game-specific stats
 create function private.log_stat_definition()
 returns trigger language plpgsql security definer set search_path = ''
@@ -461,14 +537,14 @@ begin
   else
     v_game := new.game_id;
   end if;
-
+ 
   if v_game is null then
     return null; -- defaults are managed from the SQL Editor
   end if;
   if not exists (select 1 from public.games where id = v_game) then
     return null; -- whole game is being deleted
   end if;
-
+ 
   if tg_op = 'INSERT' then
     if new.parent_id is null then
       v_msg := 'GM added the main stat ' || new.name;
@@ -489,26 +565,26 @@ begin
       return null;
     end if;
   end if;
-
+ 
   insert into public.game_activity (game_id, character_id, actor_id, kind, source, message)
   values (v_game, null, (select auth.uid()), 'stat_definition', 'gm', v_msg);
   return null;
 end;
 $$;
-
+ 
 create trigger log_stat_definition
   after insert or update or delete on public.stat_definitions
   for each row execute function private.log_stat_definition();
+ 
 
 -- 5. APPLYING STAT CHANGES ____________________________________________
--- game rules live in the app's rules.py; this function only guarantees integrity
 -- ---------- Apply a stat change planned by the app ----------
 -- Knows nothing about D6/D20 rules. It guarantees integrity:
---   * permissions: spending needs owner or GM; free edits need GM (or owner
---     when the game allows player editing)
---   * costs are never negative, balances never go below zero
---   * spending points can only raise a stat, never lower it
---   * the stat, the spend and the activity entry are saved together
+-- * permissions: spending needs owner or GM; free edits need GM (or owner
+-- when the game allows player editing)
+-- * costs are never negative, balances never go below zero
+-- * spending points can only raise a stat, never lower it
+-- * the stat, the spend and the activity entry are saved together
 -- Called from the app with sb.rpc('apply_stat_change', {...})
 create function public.apply_stat_change(
   p_character_id bigint,
@@ -538,14 +614,14 @@ begin
   if coalesce(trim(p_description), '') = '' then
     raise exception 'A description of the change is required';
   end if;
-
-  -- Lock the character so two changes can't spend the same points
+ 
+ -- Lock the character so two changes can't spend the same points
   select * into v_char from public.characters where id = p_character_id for update;
   if not found then
     raise exception 'Character not found';
   end if;
   v_is_dm := private.is_game_dm(v_char.game_id);
-
+ 
   if p_cost > 0 then
     if v_char.owner_id is distinct from v_actor and not v_is_dm then
       raise exception 'You can only spend points on your own characters';
@@ -553,11 +629,11 @@ begin
   elsif not private.can_edit_character_stats(p_character_id) then
     raise exception 'Only the GM can change stats directly in this game';
   end if;
-
+ 
   if not private.stat_fits_character(p_stat_id, p_character_id) then
     raise exception 'That stat is not part of this game';
   end if;
-
+ 
   if p_cost > 0 then
     select * into v_old from public.character_stats
     where character_id = p_character_id and stat_id = p_stat_id;
@@ -567,26 +643,26 @@ begin
        or (v_new_p = v_old_p and coalesce(p_value, 0) = coalesce(v_old.value, 0)) then
       raise exception 'Spending points can only raise a stat';
     end if;
-
+ 
     select coalesce(sum(amount), 0) into v_balance
     from public.point_transactions where character_id = p_character_id;
     if v_balance < p_cost then
       raise exception 'Not enough points: this costs %, you have %', p_cost, v_balance;
     end if;
   end if;
-
+ 
   perform set_config('app.rpc_logging', 'on', true);
-
+ 
   insert into public.character_stats (character_id, stat_id, dice, pips, value)
   values (p_character_id, p_stat_id, coalesce(p_dice, 0), coalesce(p_pips, 0), coalesce(p_value, 0))
   on conflict (character_id, stat_id)
   do update set dice = excluded.dice, pips = excluded.pips, value = excluded.value;
-
+ 
   if p_cost > 0 then
     insert into public.point_transactions (character_id, amount, reason, created_by)
     values (p_character_id, -p_cost, p_description, v_actor);
   end if;
-
+ 
   if p_cost > 0 then
     v_source := 'points';
     v_msg := v_char.name || ' ' || p_description || ' (spent ' || p_cost || ' points)';
@@ -597,33 +673,30 @@ begin
     v_source := 'direct';
     v_msg := v_char.name || ' ' || p_description || ' (edited directly)';
   end if;
-
+ 
   insert into public.game_activity (game_id, character_id, actor_id, kind, source, message)
   values (v_char.game_id, p_character_id, v_actor, 'stat_change', v_source, v_msg);
-
+ 
   perform set_config('app.rpc_logging', '', true);
-
+ 
   select coalesce(sum(amount), 0) into v_balance
   from public.point_transactions where character_id = p_character_id;
   return jsonb_build_object('balance', v_balance);
 end;
 $$;
-
+ 
 
 -- 6. VIEWS ____________________________________________________________
--- security_invoker: normal security rules still apply
-
 create view public.character_point_balances
 with (security_invoker = true) as
   select character_id, sum(amount)::int as balance
   from public.point_transactions
   group by character_id;
-
+ 
 -- Final value of every stat for every character, plus next upgrade cost
 
 
 -- 7. ROW LEVEL SECURITY _______________________________________________
-
 alter table public.profiles enable row level security;
 alter table public.games enable row level security;
 alter table public.game_members enable row level security;
@@ -638,14 +711,14 @@ alter table public.abilities enable row level security;
 alter table public.character_abilities enable row level security;
 alter table public.point_transactions enable row level security;
 alter table public.game_activity enable row level security;
-
+ 
 -- Profiles: logged-in users see usernames (to invite players)
 create policy "Profiles readable" on public.profiles
   for select to authenticated using (true);
 create policy "Update own profile" on public.profiles
   for update to authenticated
   using (id = (select auth.uid())) with check (id = (select auth.uid()));
-
+ 
 -- Games
 create policy "See own or joined games" on public.games
   for select to authenticated
@@ -657,7 +730,7 @@ create policy "DM updates game" on public.games
   using (private.is_game_dm(id)) with check (dm_id = (select auth.uid()));
 create policy "DM deletes game" on public.games
   for delete to authenticated using (private.is_game_dm(id));
-
+ 
 -- Members
 create policy "See members of my games" on public.game_members
   for select to authenticated
@@ -672,7 +745,7 @@ create policy "Accept own invite" on public.game_members
 create policy "DM removes players or player leaves" on public.game_members
   for delete to authenticated
   using (role = 'player' and (private.is_game_dm(game_id) or user_id = (select auth.uid())));
-
+ 
 -- Stat definitions: defaults visible to all; game stats to members; DM edits own game's
 create policy "See default and game stats" on public.stat_definitions
   for select to authenticated using (game_id is null or private.is_game_member(game_id));
@@ -684,7 +757,7 @@ create policy "DM edits game stats" on public.stat_definitions
   with check (game_id is not null and private.is_game_dm(game_id));
 create policy "DM deletes game stats" on public.stat_definitions
   for delete to authenticated using (game_id is not null and private.is_game_dm(game_id));
-
+ 
 -- Characters: owner and DM only
 -- (to let the whole party see sheets: using (private.is_game_member(game_id)))
 create policy "Owner or DM sees character" on public.characters
@@ -701,7 +774,7 @@ create policy "Owner or DM edits character" on public.characters
 create policy "Owner or DM deletes character" on public.characters
   for delete to authenticated
   using (owner_id = (select auth.uid()) or private.is_game_dm(game_id));
-
+ 
 -- Character stats: owner + DM see; DM edits (owner too if the game allows)
 create policy "View character stats" on public.character_stats
   for select to authenticated using (private.can_manage_character(character_id));
@@ -716,7 +789,7 @@ create policy "Permitted users edit character stats" on public.character_stats
               and private.stat_fits_character(stat_id, character_id));
 create policy "Permitted users remove character stats" on public.character_stats
   for delete to authenticated using (private.can_edit_character_stats(character_id));
-
+ 
 -- Spells: members read, DM manages
 create policy "Members see spells" on public.spells
   for select to authenticated using (private.is_game_member(game_id));
@@ -727,7 +800,7 @@ create policy "DM edits spells" on public.spells
   using (private.is_game_dm(game_id)) with check (private.is_game_dm(game_id));
 create policy "DM deletes spells" on public.spells
   for delete to authenticated using (private.is_game_dm(game_id));
-
+ 
 create policy "View character spells" on public.character_spells
   for select to authenticated using (private.can_manage_character(character_id));
 create policy "Add character spells" on public.character_spells
@@ -736,7 +809,7 @@ create policy "Add character spells" on public.character_spells
               and private.spell_fits_character(spell_id, character_id));
 create policy "Remove character spells" on public.character_spells
   for delete to authenticated using (private.can_manage_character(character_id));
-
+ 
 -- Inventory: owner and DM
 create policy "View inventory" on public.inventory_items
   for select to authenticated using (private.can_manage_character(character_id));
@@ -748,7 +821,7 @@ create policy "Edit inventory" on public.inventory_items
   with check (private.can_manage_character(character_id));
 create policy "Remove inventory" on public.inventory_items
   for delete to authenticated using (private.can_manage_character(character_id));
-
+ 
 -- Notes: DM sees all, players see visible ones; DM writes
 create policy "DM sees all notes, players see visible ones" on public.game_notes
   for select to authenticated
@@ -760,7 +833,7 @@ create policy "DM edits notes" on public.game_notes
   using (private.is_game_dm(game_id)) with check (private.is_game_dm(game_id));
 create policy "DM deletes notes" on public.game_notes
   for delete to authenticated using (private.is_game_dm(game_id));
-
+ 
 -- Abilities: members read, DM manages; owner or DM picks for a character
 create policy "Members see abilities" on public.abilities
   for select to authenticated using (private.is_game_member(game_id));
@@ -771,7 +844,7 @@ create policy "DM edits abilities" on public.abilities
   using (private.is_game_dm(game_id)) with check (private.is_game_dm(game_id));
 create policy "DM deletes abilities" on public.abilities
   for delete to authenticated using (private.is_game_dm(game_id));
-
+ 
 create policy "View character abilities" on public.character_abilities
   for select to authenticated using (private.can_manage_character(character_id));
 create policy "Select character abilities" on public.character_abilities
@@ -780,54 +853,55 @@ create policy "Select character abilities" on public.character_abilities
               and private.ability_fits_character(ability_id, character_id));
 create policy "Remove character abilities" on public.character_abilities
   for delete to authenticated using (private.can_manage_character(character_id));
-
+ 
 -- Points ledger: owner + DM see; only DM inserts directly; no edits/deletes
 create policy "Owner or DM sees point history" on public.point_transactions
   for select to authenticated using (private.can_manage_character(character_id));
 create policy "DM awards points" on public.point_transactions
   for insert to authenticated with check (private.is_character_dm(character_id));
-
+ 
 -- Activity: every member sees it; only triggers write it
 create policy "Members see game activity" on public.game_activity
   for select to authenticated using (private.is_game_member(game_id));
-
+ 
 
 -- 8. PERMISSIONS ______________________________________________________
 -- logged-in users only; the anon key gets nothing
-
 revoke all on all functions in schema private from public;
 grant usage on schema private to authenticated;
 grant execute on all functions in schema private to authenticated;
-
+ 
 revoke all on function public.apply_stat_change(bigint, bigint, int, int, int, int, text) from public, anon;
 grant execute on function public.apply_stat_change(bigint, bigint, int, int, int, int, text) to authenticated;
-
+ 
 grant select on public.profiles to authenticated;
 grant update (username) on public.profiles to authenticated;
-
+ 
 grant select, insert, update, delete on public.games to authenticated;
-
+ 
 grant select, insert, delete on public.game_members to authenticated;
 grant update (status, last_seen_activity_at) on public.game_members to authenticated;
-
+ 
 grant select, insert, update, delete on
   public.stat_definitions, public.characters, public.character_stats,
   public.spells, public.inventory_items, public.game_notes, public.abilities
 to authenticated;
-
+ 
 grant select, insert, delete on public.character_spells, public.character_abilities to authenticated;
 grant select, insert on public.point_transactions to authenticated;
 grant select on public.game_activity to authenticated;
 grant select on public.character_point_balances to authenticated;
-
+ 
 
 -- 9. IMAGE STORAGE ____________________________________________________
--- private bucket; members view, DM uploads/deletes
-
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('game-images', 'game-images', false, 5242880,
-        array['image/png', 'image/jpeg', 'image/webp']);
-
+        array['image/png', 'image/jpeg', 'image/webp'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+ 
 create policy "Members view game images" on storage.objects
   for select to authenticated
   using (bucket_id = 'game-images'
@@ -838,13 +912,18 @@ create policy "DM uploads game images" on storage.objects
 create policy "DM deletes game images" on storage.objects
   for delete to authenticated
   using (bucket_id = 'game-images' and private.is_game_dm(private.path_game_id(name)));
-
+ 
 
 -- 10. DATA: profiles for any existing users, and default stats ________
-
+-- Existing users keep the username they signed up with (if valid and unique)
+insert into public.profiles (id, username)
+select id, raw_user_meta_data ->> 'username' from auth.users
+where char_length(raw_user_meta_data ->> 'username') between 3 and 30
+on conflict do nothing;
+ 
 insert into public.profiles (id, username)
 select id, 'player_' || substr(id::text, 1, 8) from auth.users
-on conflict (id) do nothing;
+on conflict do nothing;
  
 -- Default main stats and skills shared by every game (edit to taste)
 with mains as (
@@ -872,3 +951,6 @@ join (values
   ('Technical', 'Computers', 1, '🖥️'),
   ('Technical', 'Medicine', 2, '🩺')
 ) as s(main, name, ord, emoji) on s.main = m.name;
+ 
+commit;
+ 

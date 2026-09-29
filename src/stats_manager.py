@@ -1,6 +1,6 @@
 import streamlit as st
-from db import delete_game_image
-from icons import IconChange, icon_inputs, label_html, prefetch_icons
+from src.db import delete_game_image
+from src.icons import IconChange, icon_inputs, label_html, prefetch_icons
 
 
 def load_stats(sb, game_id: int):
@@ -113,7 +113,7 @@ def _edit_controls(sb, game_id: int, stat, main_names: dict, child_skills: list)
 def render_stats_tab(sb, game_id: int, is_dm: bool):
     main_stats, skills = load_stats(sb, game_id)
     main_names = {m_s['id']: m_s['name'] for m_s in main_stats}
-    prefetch_icons(main_stats + [sub for subs in skills.values() for sub in sub])
+    prefetch_icons(main_stats + [s for subs in skills.values() for s in subs])
 
     # DM: Add Stats
     if is_dm:
@@ -155,15 +155,13 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
         sub_stat = skills.get(main_stat['id'], [])
         with st.container(border=True):
             head, ctrl = st.columns([6, 1])
-            head.markdown(
-                f'#### ' + label_html(main_stat, size=28, note='default' 
-                                      if main_stat['game_id'] is None else None),
-                                      unsafe_allow_html=True)
+            head.markdown('#### ' + label_html(main_stat, size=28, note='default' if main_stat['game_id'] is None else None),
+                                     unsafe_allow_html=True)
             if main_stat.get('description'):
                 head.caption(main_stat['description'])
             if is_dm and main_stat['game_id'] is not None:
                 with ctrl:
-                    _edit_controls(sb, main_stat, main_names, sub_stat)
+                    _edit_controls(sb, game_id, main_stat, main_names, sub_stat)
 
             if not sub_stat:
                 st.caption('No Skills yet.')
