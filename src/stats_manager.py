@@ -1,7 +1,6 @@
 import streamlit as st
-
-DEFAULT_ICON = '🌐'
-CUSTOM_ICON = '🎲'
+from db import delete_game_image
+from icons import IconChange, icon_inputs, label_html, prefetch_icons
 
 
 def load_stats(sb, game_id: int):
@@ -34,25 +33,28 @@ def _friendly(err) -> str:
     return text
 
 
-def _add_stat(sb, game_id, parent_id, name, description, order):
+def _add_stat(sb, game_id, parent_id, name, description, order, icon_change: IconChange):
     if not name.strip():
         st.error('Please enter a name')
         return
     try:
+        fields = icon_change.fields()
         sb.table('stat_definitions').insert({
             'game_id': game_id,
             'parent_id': parent_id,
             'name': name.strip(),
             'description': description.strip() or None,
             'sort_order': int(order),
+            **fields
         }).execute()
     except Exception as err:
+        icon_change.rollback()
         st.error(_friendly(err))
     else:
         st.rerun()
 
 
-def _edit_controls(sb, stat, main_names: dict):
+def _edit_controls(sb, game_id: int, stat, main_names: dict, child_skills: list):
     """ Edit popover for one of the game's own stats. """
 
     is_main = stat['parent_id'] is None
@@ -68,22 +70,28 @@ def _edit_controls(sb, stat, main_names: dict):
                     'Main Stat', ids, format_func=main_names.get,
                     index=ids.index(parent_id) if parent_id in ids else 0
                 )
+            emoji, upload, remove = icon_inputs(f"edit_stat_{stat['id']}", stat)
             save = st.form_submit_button('Save')
 
         if save:
             if not name.strip():
                 st.error('Please enter Name')
             else:
+                change = IconChange(game_id, emoji, upload, remove, stat.get('icon_path'))
                 try:
+                    fields = change.fields()
                     sb.table('stat_definitions').update({
                         'name': name.strip(),
                         'description': desc.strip() or None,
                         'sort_order': int(order),
                         'parent_id': parent_id,
+                        **fields
                     }).eq('id', stat['id']).execute()
                 except Exception as err:
+                    change.rollback()
                     st.error(_friendly(err))
                 else:
+                    change.commit()
                     st.rerun()
 
         st.divider()
@@ -96,14 +104,16 @@ def _edit_controls(sb, stat, main_names: dict):
             except Exception as err:
                 st.error(_friendly(err))
             else:
+                # clean up uploaded icons when deleting ability or skill
+                delete_game_image(stat.get('icon_path'),
+                                  *[c_s.get('icon_path') for c_s in child_skills])
                 st.rerun()
 
 
 def render_stats_tab(sb, game_id: int, is_dm: bool):
     main_stats, skills = load_stats(sb, game_id)
-    main_names = {main_stat['id']: main_stat['name'] for main_stat in main_stats}
-
-    st.caption(f'{DEFAULT_ICON} default, in every game · {CUSTOM_ICON} for this game only')
+    main_names = {m_s['id']: m_s['name'] for m_s in main_stats}
+    prefetch_icons(main_stats + [sub for subs in skills.values() for sub in sub])
 
     # DM: Add Stats
     if is_dm:
@@ -114,9 +124,11 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
                 desc = st.text_area('Description (Optional)')
                 next_order = max((m['sort_order'] for m in main_stats), default=0) +1
                 order = st.number_input('Display Order', min_value=0, value=next_order)
+                emoji, upload, _ = icon_inputs('add_main')
                 add_stat = st.form_submit_button('Add Main Stat')
             if add_stat:
-                _add_stat(sb, game_id, None, name, desc, order)
+                _add_stat(sb, game_id, None, name, desc, order,
+                          IconChange(game_id, emoji, upload, False))
 
         with add_skill_col.expander('➕ Add a skill'):
             with st.form('add_skill', clear_on_submit=True):
@@ -124,12 +136,14 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
                 name = st.text_input('Skill Name', placeholder='e.g. Blaster, Riding, Swimming')
                 desc = st.text_area('Description (optional)')
                 order = st.number_input('Display Order', min_value=0, value=0)
+                emoji, upload, _ = icon_inputs('add_skill')
                 add_skill = st.form_submit_button('Add Skill')
             if add_skill:
                 if parent_id is None:
                     st.error('Add a main stat first')
                 else:
-                    _add_stat(sb, game_id, parent_id, name, desc, order)
+                    _add_stat(sb, game_id, parent_id, name, desc, order,
+                              IconChange(game_id, emoji, upload, False))
 
         st.caption('Default stats are shared by every game, can only be edited from the DB')
 
@@ -137,27 +151,28 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
     # List
     if not main_stats:
         st.info('No stats.')
-    for m in main_stats:
+    for main_stat in main_stats:
+        sub_stat = skills.get(m['id'], [])
         with st.container(border=True):
             head, ctrl = st.columns([6, 1])
-            icon = DEFAULT_ICON if m['game_id'] is None else CUSTOM_ICON
-            head.markdown(f'#### {icon} {m["name"]}')
-            if m.get('description'):
-                head.caption(m['description'])
-            if is_dm and m['game_id'] is not None:
+            head.markdown(
+                f'#### ' + label_html(main_stat, size=28, note='default' 
+                                      if main_stat['game_id'] is None else None),
+                                      unsafe_allow_html=True)
+            if main_stat.get('description'):
+                head.caption(main_stat['description'])
+            if is_dm and main_stat['game_id'] is not None:
                 with ctrl:
-                    _edit_controls(sb, m, main_names)
+                    _edit_controls(sb, main_stat, main_names, sub_stat)
 
-            subs = skills.get(m['id'], [])
-            if not subs:
+            if not sub_stat:
                 st.caption('No Skills yet.')
-            for s in subs:
+            for s in sub_stat:
                 name_col, s_ctrl = st.columns([6, 1])
-                s_icon = DEFAULT_ICON if s['game_id'] is None else CUSTOM_ICON
-                text = f'{s_icon} {s["name"]}'
+                text = label_html(s, note='default' if s['game_id'] is None else None)
+                name_col.markdown(text, unsafe_allow_html=True)
                 if s.get('decription'):
-                    text += f' · *{s["description"]}*'
-                name_col.markdown(text)
+                    name_col.caption(s['description'])
                 if is_dm and s['game_id'] is not None:
                     with s_ctrl:
-                        _edit_controls(sb, s, main_names)
+                        _edit_controls(sb, game_id, s, main_names, [])

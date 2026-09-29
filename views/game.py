@@ -2,11 +2,12 @@ from datetime import datetime
 import streamlit as st
 from src.db import get_supabase, upload_game_image, delete_game_image, game_image_url
 from src.stats_manager import render_stats_tab
+from src.icons import IconChange, icon_inputs, label_html, prefetch_icons
 
 sb = get_supabase()
 uid = st.session_state.user.id
 
-DICE_LABELS = {'d6': 'D6 (Dice + Pips)', 'flat': 'Flat Numbers'}
+DICE_LABELS = {'d6': 'D6 (Dice + Pips)', 'd20': 'D20 (1d20+value)'}
 SOURCE_ICONS = {'points': '🎯', 'direct': '✏️', 'gm': '🧙', 'award': '⭐'}
 
 game_id = st.session_state.get('current_game_id')
@@ -72,7 +73,7 @@ if is_dm:
                         
             player_edit = st.checkbox(
                 'Players can edit their own character sheets',
-                value = bool(game.get('playersd_can_edit_sheets'))
+                value = bool(game.get('players_can_edit_sheets'))
                 )
 
             description = st.text_area(
@@ -196,6 +197,8 @@ with activity_tab:
             st.warning(line)
         else:
             st.write(line)
+    st.caption('🎯 spent points · ✏️ edited directly · 🧙 changed by GM · ⭐ points awarded')
+    
 
 
 # DM: Awarded points at the end of a session
@@ -334,25 +337,34 @@ with notes_tab:
 
 
 # Abilities
+def _ability_error(err) -> str:
+    text = str(err)
+    return 'Name already used in this game.' if ('23505' in text or 'duplicate key' in text) else text
+
+
 with abilities_tab:
     st.caption('Abilities players can choose for their characters.')
     if is_dm:
         with st.form('add_ability', clear_on_submit=True):
-            a_name = st.text_input('Ability Name')
+            a_name = st.text_input('Ability Name', placeholder='e.g. Force Sensitive')
             a_desc = st.text_area('Description')
+            a_emoji, a_upload, _ = icon_inputs('add_ability')
             add_ability = st.form_submit_button('Add Ability')
         if add_ability:
             if not a_name.strip():
                 st.arror('Please enter an ability name')
             else:
+                change = IconChange(game_id, a_emoji, a_upload, False)
                 try:
                     sb.table('abilites').insert({
                         'game_id': game_id,
                         'name': a_name.strip(),
                         'description': a_desc.strip() or None,
+                        **change.fields()
                     }).execute()
                 except Exception as err:
-                    st.arror(f'Could not add ability:{err}')
+                    change.rollback()
+                    st.arror(f'Could not add ability:{_ability_error(err)}')
                 else:
                     st.rerun()
 
@@ -363,15 +375,45 @@ with abilities_tab:
         .order('name')
         .execute().data
     )
+    prefetch_icons(abilities)
     if not abilities:
         st.caption('No abilites defined yet.')
-    for ability in abilities:
+    for a in abilities:
         with st.container(border=True):
             c1, c2 = st.columns([5, 1])
-            c1.markdown(f'**{ability['name']}**')
-            if ability.get('description'):
-                c1.write(ability['description'])
-            if is_dm and c2.button('Delete',key = f'del_ability_{ability['id']}'):
-                sb.table('abilities').delete().eq('id', ability['id']).execute()
-                st.rerun()
-                
+            c1.markdown(label_html(a, bold=True, size=26), unsafe_allow_html=True)
+            if a.get('description'):
+                c1.write(a['description'])
+            if is_dm:
+                with c2.popover('Edit'):
+                    with st.form(f"edit_ability_{a['id']}"):
+                        e_name = st.text_input('Name', value=a['name'])
+                        e_desc = st.text_area('Description', value=a.get('desciption') or '')
+                        e_emoji, e_upload, e_remove = icon_inputs(f"edit_ability_{a}", a)
+                        e_save = st.form_submit_button('Save')
+                    if e_save:
+                        if not e_name.strip():
+                            st.error('Name cannot be null.')
+                        else:
+                            change = IconChange(
+                                game_id, e_emoji, e_upload, e_remove, a.get('icon_path')
+                            )
+                            try:
+                                sb.table('abilities').update({
+                                    'name': e_name.strip(),
+                                    'description': e_desc.strip() or None,
+                                    **change.fields()
+                                }).eq('id', a['id']).execute()
+                            except Exception as err:
+                                change.rollback()
+                                st.error(_ability_error(err))
+                            else:
+                                change.commit()
+                                st.rerun()
+                    st.divider()
+                    st.caption("Deleting an ability removes it from every character.")
+                    confirm = st.checkbox('I understand', key=f"confirm_del_a_{a['id']}")
+                    if st.button('Delete', key=f"del_a_{a['id']}", type='primary', disabled=not confirm):
+                        sb.table('abilities').delete().eq('id', a['id']).execute()
+                        delete_game_image(a.get('icon_path'))
+                        st.rerun()

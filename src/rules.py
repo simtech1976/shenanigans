@@ -5,9 +5,10 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+
 D6 = 'd6'
 D20 = 'd20'
-UPGRADE_STEP = 1 
+UPGRADE_STEP = 1
 
 
 def level_from_row(dice_system: str, row: dict | None) -> int:
@@ -81,7 +82,6 @@ def roll(system: str, level: int, rng: random.Ranom | None = None) -> tuple[list
 
 
 
-
 # Character sheet
 @dataclass
 class SheetStat:
@@ -95,6 +95,8 @@ class SheetStat:
     main_level: int
     code: str
     next_cost: int
+    icon_emogi: str | None = None
+    icon_path: str | None = None
 
     @property
     def is_improved(self) -> bool:
@@ -121,7 +123,9 @@ def build_sheet(game: dict, main_stat: list[dict], skills_by_main: dict[int, lis
             bonus=bonus,
             main_level=main_level,
             code=format_level(system, level),
-            next_cost=upgrade_cost(system, is_main, level, *rates)
+            next_cost=upgrade_cost(system, is_main, level, *rates),
+            icon_emoji=defn.get('icon_emogi'),
+            icon_path=defn.get('icon_path')
         )
 
     sheet = []

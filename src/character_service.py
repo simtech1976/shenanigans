@@ -21,6 +21,7 @@ def point_balance(sb, character_id: int) -> int:
         .eq('character_id', character_id)
         .execute().data
     )
+    return rows[0]['balance'] if rows else 0
 
 
 def apply_change(sb, character_id: int, change: StatChange) -> dict:
