@@ -152,7 +152,7 @@ def render_stats_tab(sb, game_id: int, is_dm: bool):
     if not main_stats:
         st.info('No stats.')
     for main_stat in main_stats:
-        sub_stat = skills.get(m['id'], [])
+        sub_stat = skills.get(main_stat['id'], [])
         with st.container(border=True):
             head, ctrl = st.columns([6, 1])
             head.markdown(
