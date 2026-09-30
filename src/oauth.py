@@ -108,4 +108,31 @@ def render_provider_buttons() -> None:
 def handle_oauth_callback() -> None:
     """ Call at the top of the page, completes sign-in if url carries one. """
     params = st.query_params
+    if 'error' in params or 'error_description' in params:
+        message = params.get('error_description') or params.get('error')
+        st.query_params.clear()
+        st.error(f'Sign in was cancelled or failed: {message}')
+        return
+
+    code = params.get('code')
+    if not code:
+        return
+    ticket = params.get('oauth_ticket')
+    st.query_params.clear()
+    
+    verifier = _take_verifier(ticket) if ticket else None
+    if not verifier:
+        st.error('Sign in failed: missing or expired ticket.')
+        return
+
+    try:
+        res = get_supabase().auth.exchange_code_for_session(
+            {'auth_code': code, 'code_verifier': verifier}
+        )
+    except Exception as Err:
+        st.error(f'Sign in failed: {Err}')
+        return
+
+    st.session_stat.user = res.user
+    st.rerun()
     
