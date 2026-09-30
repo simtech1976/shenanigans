@@ -18,7 +18,7 @@ from src.db import get_supabase
 
 PROVIDERS = {
     'azure': ('Microsoft', 'email'),
-    'discord': ('Discord', 'None')
+    'discord': ('Discord', None)
 }
 
 FLOW_TTL_SEC = 600 # allow 10 minutes for the flow to complete
