@@ -54,7 +54,7 @@ def _take_verifier(ticket: str) -> str | None:
 
 def enabled_providers() -> list[str]:
     """ Proviers listed in secrets """
-    wanted = st.secrets.get("oauth_providers", [])
+    wanted = st.secrets.get("OAUTH_PROVIDERS", [])
     return [p for p in wanted if p in PROVIDERS]
 
 
