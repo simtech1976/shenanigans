@@ -1,0 +1,42 @@
+-- __________________________________________________________________________________
+-- | 1. Social sign-in
+-- | NOTES: Profile for every new user.
+-- |        Email sign-up: uses the username they chose (sign-up fails if it's taken,
+-- |        and the app asks them to pick another).
+-- |        Google / Microsoft / Discord: builds one from their display name
+-- __________________________________________________________________________________
+
+create or replace function private.handle_new_user()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+declare
+  meta      jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  base      text;
+  candidate text;
+begin
+  if meta ? 'username' then
+    insert into public.profiles (id, username) values (new.id, meta ->> 'username');
+    return new;
+  end if;
+
+  select nullif(left(regexp_replace(trim(n), '\s+', ' ', 'g'), 30), '') into base
+  from unnest(array[meta ->> 'full_name', meta ->> 'name',
+                    meta ->> 'user_name', meta ->> 'preferred_username']) as n
+  where n is not null and position('@' in n) = 0 and char_length(trim(n)) >= 3
+  limit 1;
+
+  base := coalesce(base, 'player_' || substr(new.id::text, 1, 8));
+  candidate := base;
+  if exists (select 1 from public.profiles where username = candidate) then
+    candidate := left(base, 25) || '_' || substr(md5(new.id::text), 1, 4);
+  end if;
+  if exists (select 1 from public.profiles where username = candidate) then
+    candidate := 'player_' || substr(new.id::text, 1, 8);
+  end if;
+
+  insert into public.profiles (id, username) values (new.id, candidate);
+  return new;
+end;
+$$;
+
+revoke all on function private.handle_new_user() from public;
