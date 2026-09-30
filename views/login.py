@@ -1,5 +1,6 @@
 import streamlit as st
 from src.db import get_supabase
+from src.oauth import handle_oauth_callback, render_provider_buttons, enabled_providers
 
 sb = get_supabase()
 
@@ -7,6 +8,7 @@ MIN_PW_LEN = 8
 MIN_USER_LEN = 3
 MAX_USER_LEN = 30
 
+handle_oauth_callback()
 login_tab, signup_tab, reset_tab = st.tabs(['Log In', 'Sign Up', 'Forgot Password'])
 
 with login_tab:
@@ -29,6 +31,11 @@ with login_tab:
             else:
                 st.session_state.user = res.user
                 st.rerun()
+
+    if enabled_providers():
+        st.divider()
+        st.write('Or log in with:')
+        render_provider_buttons()
 
 
 with signup_tab:
