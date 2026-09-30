@@ -85,7 +85,7 @@ def authorise_url(provider: str) -> str:
         'code_challange': challange,
         'code_challange_method': 's256'
     }
-    scopes = PROVIDERS.get[provider][1]
+    scopes = PROVIDERS[provider][1]
     if scopes:
         params['scopes'] = scopes
     return f"{st.secrets['SUPABASE_URL'].rstrip('/')}/auth/v1/authorize?{urlencode(params)}"
