@@ -8,7 +8,6 @@ returns to the redirect URL. This is because the browser treats the redirect as 
 
 import base64
 import hashlib
-import haslib
 import secrets
 import threading
 import time
@@ -135,4 +134,3 @@ def handle_oauth_callback() -> None:
 
     st.session_stat.user = res.user
     st.rerun()
-    
