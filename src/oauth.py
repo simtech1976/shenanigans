@@ -71,6 +71,7 @@ def _session_flow() -> dict:
         _save_verifier(ticket, verifier)
         flow = {'ticket': ticket, 'verifier': verifier, 'created': time.time()}
         st.session_state['oauth_flow'] = flow
+    return flow
 
 
 def authorise_url(provider: str) -> str:
@@ -82,12 +83,12 @@ def authorise_url(provider: str) -> str:
         'provider': provider,
         'redirect_to': f"{_app_url()}/?{urlencode({'oauth_ticket': flow['ticket']})}",
         'code_challange': challange,
-        'code_challange_method': 'S256'
+        'code_challange_method': 's256'
     }
     scopes = PROVIDERS.get[provider][1]
     if scopes:
-        params['scope'] = scopes
-    return f"{st.secrets['SUPABASE_URL'].rstrip('/')}/oauth/v1/authorize?{urlencode(params)}"
+        params['scopes'] = scopes
+    return f"{st.secrets['SUPABASE_URL'].rstrip('/')}/auth/v1/authorize?{urlencode(params)}"
 
 
 
