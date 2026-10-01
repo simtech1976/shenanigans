@@ -173,7 +173,7 @@ notes_tab, players_tab, stats_tab, abilities_tab, activity_tab = tabs[0], tabs[1
 
 # Players
 with players_tab:
-    render_players_tab(sb, game_id, is_dm)
+    render_players_tab(sb, game_id, uid, is_dm)
 
 
 # Stats and Skills

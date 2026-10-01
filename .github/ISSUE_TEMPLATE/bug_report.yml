@@ -1,0 +1,55 @@
+name: Bug report
+description: Something isn't working as it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Never paste passwords, keys, or addresses containing
+        `access_token`, `refresh_token` or `provider_token`.**
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a game as the GM
+        2. Go to the Players tab
+        3. Click Invite next to …
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where were you running the app?
+      options:
+        - Online (streamlit.app)
+        - Codespaces
+        - Locally
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Your role in the game
+      options:
+        - GM
+        - Player
+        - Not in a game / logged out
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown at the bottom of the sidebar, e.g. v0.9.0
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: Paste any error text (with secrets removed).
+      render: text

@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to be able to do?
+      description: Describe it from the table's point of view, e.g. "As a GM, I want to…"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help?
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is it for?
+      multiple: true
+      options:
+        - GMs
+        - Players
+        - Everyone
+  - type: textarea
+    id: ideas
+    attributes:
+      label: Any ideas on how it could work?

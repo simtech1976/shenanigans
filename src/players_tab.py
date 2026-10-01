@@ -52,69 +52,69 @@ def _invite_section(sb, game_id: int, member_ids: set):
 
 
 
-    def render_players_tab(sb, game_id: int, uid: str, is_dm: bool):
-        members = (
-            sb.table('game_members')
-            .select('user_id, role, status, created_at, profiles(username)')
+def render_players_tab(sb, game_id: int, uid: str, is_dm: bool):
+    members = (
+        sb.table('game_members')
+        .select('user_id, role, status, created_at, profiles(username)')
+        .eq('game_id', game_id)
+        .order('created_at')
+        .execute().data
+    )
+    member_ids = {m['user_id'] for m in members}
+
+    # Shows DM usernames for characters
+    characters_by_owner: dict[str, list[str]] = {}
+    if is_dm:
+        chars = (
+            sb.table('characters')
+            .select('owner_id, name')
             .eq('game_id', game_id)
-            .order('created_at')
+            .order('name')
             .execute().data
         )
-        member_ids = {m['user_id'] for m in members}
+        for c in chars:
+            characters_by_owner.setdefault(c['owner_id'], []).append(c['name'])
 
-        # Shows DM usernames for characters
-        characters_by_owner: dict[str, list[str]] = {}
-        if is_dm:
-            chars = (
-                sb.table('characters')
-                .select('owner_id, name')
-                .eq('game_id', game_id)
-                .order('name')
-                .execute().data
-            )
-            for c in chars:
-                characters_by_owner.setdefault(c['owner_id'], []).append(c['name'])
+    if is_dm:
+        _invite_section(sb, game_id, member_ids)
+        st.divider()
 
-        if is_dm:
-            _invite_section(sb, game_id, member_ids)
-            st.divider()
+    st.subheader('In this game')
+    for m in members:
+        username = (m.get('profiles') or {}).get('username', 'Unknown player')
+        is_me = m['user_id'] == uid
+        if m['role'] == 'dm':
+            status = '🧙 Dungeon Master'
+        elif m['status'] == 'invited':
+            status = '📨 Invited'
+        else:
+            status = '🎲 Player'
 
-        st.subheader('In this game')
-        for m in members:
-            username = (m.get('profiles') or {}).get('username', 'Unknown player')
-            is_me = m['user_id'] == uid
-            if m['role'] == 'dm':
-                status = '🧙 Dungeon Master'
-            elif m['status'] == 'invited':
-                status = '📨 Invited'
-            else:
-                status = '🎲 Player'
+        with st.container(border=True):
+            info_col, action_col = st.columns([4, 1])
+            info_col.markdown(f"**{username}**{' (you)' if is_me else ''} - {status}")
+            if is_dm and m['role'] == 'player' and m['status'] == 'active':
+                names = characters_by_owner.get(m['user_id'])
+                info_col.caption('Playing:' + ', '.join(names) if names else 'No characters yet.')
 
-            with st.container(border=True):
-                info_col, action_col = st.columns([4, 1])
-                info_col.markdown(f"**{username}**{' (you)' if is_me else ''} - {status}")
-                if is_dm and m['role'] == 'player' and m['status'] == 'active':
-                    names = characters_by_owner.get(m['user_id'])
-                    info_col.caption('Playing:' + ', '.join(names) if names else 'No characters yet.')
+            # DN can cancel invitations or remove players
+            if is_dm and m['role'] == 'player':
+                invited = m['status'] == 'invited'
+                with action_col.popover('Cancel Invite' if invited else 'Remove'):
+                    if invited:
+                        st.write(f'Cancel the invitation for **{username}**?')
+                    else:
+                        st.write(f'Remove **{username}** from the game? (characters are kept).')
+                    if st.button('Confirm', key=f'remove_{m["user_id"]}', type='primary'):
+                        gm = st.table('game_members')
+                        gm.delete().eq('game_id', game_id).eq('user_id', m['user_id']).execute()
 
-                # DN can cancel invitations or remove players
-                if is_dm and m['role'] == 'player':
-                    invited = m['status'] == 'invited'
-                    with action_col.popover('Cancel Invite' if invited else 'Remove'):
-                        if invited:
-                            st.write(f'Cancel the invitation for **{username}**?')
-                        else:
-                            st.write(f'Remove **{username}** from the game? (characters are kept).')
-                        if st.button('Confirm', key=f'remove_{m["user_id"]}', type='primary'):
-                            gm = st.table('game_members')
-                            gm.delete().eq('game_id', game_id).eq('user_id', m['user_id']).execute()
-
-                # Players can leave the game
-                elif is_me and m['role'] == 'player':
-                    with action_col.popover('Leave Game'):
-                        st.write('Leave the game? (characters are kept).')
-                        if st.button('Leave', key='leave_game', type='primary'):
-                            gm = st.table('game_members')
-                            gm.delete().eq('game_id', game_id).eq('user_id', uid).execute()
-                            st.session_state.pop('current_game_id', None)
-                            st.switch_page('views/my_games.py')
+            # Players can leave the game
+            elif is_me and m['role'] == 'player':
+                with action_col.popover('Leave Game'):
+                    st.write('Leave the game? (characters are kept).')
+                    if st.button('Leave', key='leave_game', type='primary'):
+                        gm = st.table('game_members')
+                        gm.delete().eq('game_id', game_id).eq('user_id', uid).execute()
+                        st.session_state.pop('current_game_id', None)
+                        st.switch_page('views/my_games.py')
