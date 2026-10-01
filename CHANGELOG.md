@@ -54,7 +54,7 @@ project's history; 0.9.0 is the first tagged release.
 - Usernames are displayed literally, so formatting characters in a name can't
   change how the page renders.
 
-## [0.8.0]
+## [0.8.0] - 2026-10-01
 
 ### Added
 - **Icons** for main stats, skills and abilities: an emoji, an uploaded image
@@ -68,7 +68,7 @@ project's history; 0.9.0 is the first tagged release.
   refuses icons pointing at another game's files.
 - All icons on a page are signed in a single request.
 
-## [0.7.0]
+## [0.7.0] - 2026-09-30
 
 ### Added
 - **`rules.py`**: all game rules in pure Python (levels, pips, skill bonuses,
@@ -93,7 +93,7 @@ project's history; 0.9.0 is the first tagged release.
   (replaced by `rules.py` and `apply_stat_change`).
 - `dice.py` (replaced by `rules.py`).
 
-## [0.6.0]
+## [0.6.0] - 2026-09-27
 
 ### Added
 - **Stats & skills tab**: the GM adds game-specific main stats and skills
@@ -112,7 +112,7 @@ project's history; 0.9.0 is the first tagged release.
 - Deleting a skill that characters had values for failed, because the
   activity log looked up the skill after it had been removed.
 
-## [0.5.0]
+## [0.5.0] - 2026-09-27
 
 ### Added
 - **Skill points**: starting points per character (set by the GM when
@@ -129,7 +129,7 @@ project's history; 0.9.0 is the first tagged release.
 - Players can't award themselves points or change stats outside the rules;
   every change is recorded automatically by the database.
 
-## [0.4.0]
+## [0.4.0] - 2026-09-27
 
 ### Added
 - **My games** page: list of your games with cover images and roles,
@@ -140,13 +140,13 @@ project's history; 0.9.0 is the first tagged release.
   signed URLs; only members can view a game's images.
 - Selectable **abilities** (traits like Force Sensitive) per game.
 
-## [0.3.0]
+## [0.3.0] - 2026-09-26
 
 ### Added
 - **D6 dice system**: dice codes like 4D+2, roll buttons, and a choice of
   dice system per game.
 
-## [0.2.0]
+## [0.2.0] - 2026-09-24
 
 ### Added
 - **Core database**: profiles, games, members (roles per game, so someone can
@@ -158,7 +158,7 @@ project's history; 0.9.0 is the first tagged release.
   the GM; the GM creates the game and becomes its GM automatically.
 - Default stats: Strength, Intelligence, Mechanical and Technical, with skills.
 
-## [0.1.0]
+## [0.1.0]- 2026-09-22
 
 ### Added
 - Streamlit app connected to Supabase, with keys kept in Streamlit secrets.
