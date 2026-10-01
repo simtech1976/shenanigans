@@ -32,10 +32,20 @@ games_page = st.Page('views/my_games.py', title='My Games', icon='🎲', default
 game_page = st.Page('views/game.py', title='Current Game', icon='📜')
 profile_page = st.Page('views/profile.py', title='My Profile', icon='👤')
 logout_page = st.Page(logout, title='Log Out', icon='🔏')
+changelog_page = st.Page('views/changelog.py', title='Whats new', icon='📝')
 
-if st.session_state.user is None:
+if st.session_state.user is None:   
     pg = st.navigation([login_page])
 else:
-    pg = st.navigation([games_page, game_page, logout_page])
+    if 'profile' not in st.session_state:
+        st.session_state.profile = load_profile()
+    if not st.session_state.prfile.get('username_confirmed'):
+        # First sign ion with Microsoft or Discord, we need to confirm the username
+        pg = st.navigation([profile_page, logout])
+    else:
+        pg = st.navigation([games_page, game_page, profile_page, changelog_page, logout_page])
+        if st.session_state.pop('after_welcome', False):
+            pg.set_page(games_page)
 
+st.sidebar.caption(f'Shenanigans RPG Tables v{__version__}')
 pg.run()
