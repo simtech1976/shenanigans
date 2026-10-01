@@ -76,14 +76,14 @@ def _session_flow() -> dict:
 
 def authorise_url(provider: str) -> str:
     flow = _session_flow()
-    challange = base64.urlsafe_b64encode(
+    challenge = base64.urlsafe_b64encode(
         hashlib.sha256(flow['verifier'].encode()).digest()
     ).rstrip(b'=').decode()
     params = {
         'provider': provider,
         'redirect_to': f"{_app_url()}/?{urlencode({'oauth_ticket': flow['ticket']})}",
-        'code_challange': challange,
-        'code_challange_method': 's256'
+        'code_challenge': challenge,
+        'code_challenge_method': 's256'
     }
     scopes = PROVIDERS[provider][1]
     if scopes:
