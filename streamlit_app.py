@@ -39,13 +39,13 @@ if st.session_state.user is None:
 else:
     if 'profile' not in st.session_state:
         st.session_state.profile = load_profile()
-    if not st.session_state.prfile.get('username_confirmed'):
+    if not st.session_state.profile.get('username_confirmed'):
         # First sign ion with Microsoft or Discord, we need to confirm the username
         pg = st.navigation([profile_page, logout])
     else:
         pg = st.navigation([games_page, game_page, profile_page, changelog_page, logout_page])
         if st.session_state.pop('after_welcome', False):
-            pg.set_page(games_page)
+            st.switch_page(games_page)
 
 st.sidebar.caption(f'Shenanigans RPG Tables v{__version__}')
 pg.run()

@@ -114,7 +114,6 @@ if is_dm:
             except Exception as err:
                 ok = False
                 st.error(f'Could not save:{err}')
-
             if ok:
                 st.rerun()
 
@@ -218,7 +217,7 @@ if is_dm:
             .execute().data
         )
         if not characters:
-            st.info('No cahacters in the game yet.')
+            st.info('No characters in the game yet.')
         else:
             ids = [character['id'] for character in characters]
             balances = {
@@ -261,7 +260,7 @@ if is_dm:
                     except Exception as err:
                         st.error(f'Could not award points:{err}')
                     else:
-                        st.success(f'Awards points to {len(rows)} chacters(s).')
+                        st.success(f'Awards points to {len(rows)} characters(s).')
                         st.rerun()
 
             st.caption('Use a negative number to correct a mistake.')
