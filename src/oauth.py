@@ -133,5 +133,5 @@ def handle_oauth_callback() -> None:
         st.error(f'Sign in failed: {Err}')
         return
 
-    st.session_stat.user = res.user
+    st.session_state.user = res.user
     st.rerun()
