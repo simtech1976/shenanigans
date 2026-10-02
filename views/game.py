@@ -1,7 +1,7 @@
 from datetime import datetime
 import streamlit as st
 from src.db import get_supabase, upload_game_image, delete_game_image, game_image_url
-from src.players_tab import render_players_tab
+from tabs.players_tab import render_players_tab
 from src.stats_manager import render_stats_tab
 from src.icons import IconChange, icon_inputs, label_html, prefetch_icons
 

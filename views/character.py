@@ -2,7 +2,7 @@ import streamlit as st
 from src.character_service import load_sheet, point_balance
 from src.db import get_supabase
 from src.icons import label_html, prefetch_icons
-from src.players_tab import md_escape
+from tabs.players_tab import md_escape
 from src.rules import D6, describe_roll, format_change, roll, roll_notes
 
 
@@ -138,4 +138,3 @@ if can_manage:
                     st.switch_page('views/game.py')
                 except Exception as e:
                     st.error(f'Error deleting character: {e}')
-                    
