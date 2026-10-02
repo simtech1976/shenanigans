@@ -94,9 +94,9 @@ def render_players_tab(sb, game_id: int, uid: str, is_dm: bool):
                 invited = m['status'] == 'invited'
                 with action_col.popover('Cancel invite' if invited else 'Remove'):
                     if invited:
-                        st.write(f'Cancel the invitation to **{username}**?')
+                        st.markdown(f'Cancel the invitation to **{username}**?')
                     else:
-                        st.write(f'Remove **{username}** from this game? Their characters are '
+                        st.markdown(f'Remove **{username}** from this game? Their characters are '
                                  'kept, so they can be brought back by inviting them again.')
                     if st.button('Confirm', key=f"remove_{m['user_id']}", type='primary'):
                         sb.table('game_members').delete() \

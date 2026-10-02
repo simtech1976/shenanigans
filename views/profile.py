@@ -80,7 +80,9 @@ if first_time:
 st.divider()
 st.subheader('Account')
 providers = (getattr(user, 'app_metadata', None) or {}).get('providers', [])
-st.write('**signed in with:**' + (', '.join(PROVIDER_NAMES.get(p, p.title()) for p in providers) or 'Unknown'))
+st.markdown(
+    f"**signed in with:** {', '.join(PROVIDER_NAMES.get(p, p.title()) for p in providers) or 'Unknown'}"
+)
 
 if user.email:
     st.caption(f'Account email: {user.email} (only visible to you, not other players)')

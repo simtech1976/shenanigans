@@ -280,11 +280,11 @@ if is_dm:
             )
             for h in history:
                 sign = '+' if h['amount'] > 0 else ''
-                st.write(
-                    f'{format_date(h['created_at'])} · '
-                    f'**{h['characters']['name']}** · '
-                    f'{sign}{h['amount']} · '
-                    f'{h['reason'] or ""}'
+                st.markdown(
+                    f"{format_date(h['created_at'])} · "
+                    f"**{h['characters']['name']}** · "
+                    f"{sign}{h['amount']} · "
+                    f"{h['reason'] or ''}"
                 )
 
 # Notes

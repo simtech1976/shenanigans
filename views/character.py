@@ -85,7 +85,7 @@ def upgrade_control(container, stat):
                          help='Upgrade is free but you cannot edit directly.')
         return
     if cost > balance:
-        container.button('! {cost}', key=f'up_{stat.stat_id}', disabled=True, 
+        container.button(f'! {cost}', key=f'up_{stat.stat_id}', disabled=True, 
                          help=f'Upgrade {stat.name} to {new_code} costs {cost} points: '
                          f'{character["name"]} has {balance}.')
         return
@@ -120,7 +120,7 @@ def stat_row(stat, main=None):
         label_col.markdown(label_html(stat, bold=True, size=26), unsafe_allow_html=True)
         code_col.markdown(f'**{stat.code}***')
     else:
-        note = f'{format_change(system, stat.bonus)} over {main.name}' if stat.is_improved else None
+        note = f'{format_change(system, stat.bonus)}' if stat.is_improved else None
         label = label_html(stat, bold=stat.is_improved, note=note)
         label_col.markdown(f'<div style="padding-left:1.5rem">{label}</div>', unsafe_allow_html=True)
         code_col.markdown(f'**{stat.code}**' if stat.is_improved else f'{stat.code}')
