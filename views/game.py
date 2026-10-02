@@ -1,9 +1,10 @@
 from datetime import datetime
 import streamlit as st
 from src.db import get_supabase, upload_game_image, delete_game_image, game_image_url
+from tabs.characters_tab import render_characters_tab
 from tabs.players_tab import render_players_tab
 from src.stats_manager import render_stats_tab
-from src.icons import IconChange, icon_inputs, label_html, prefetch_icons
+from src.icons import IconChange, icon_inputs, icon_inputs, label_html, prefetch_icons
 
 sb = get_supabase()
 uid = st.session_state.user.id
@@ -165,10 +166,14 @@ def activity_notifications():
 
 activity_notifications()
 
-tab_names = ['Notes', 'Players', 'Stats & Skills', 'Abilities', 'Activity'] + (['Award Points'] if is_dm else[])
+tab_names = ['Notes', 'Characters', 'Players', 'Stats & Skills', 'Abilities', 'Activity'] + (['Award Points'] if is_dm else[])
 tabs = st.tabs(tab_names)
-notes_tab, players_tab, stats_tab, abilities_tab, activity_tab = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4]
+notes_tab, characters_tab, players_tab, stats_tab, abilities_tab, activity_tab = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4], tabs[5]
 
+
+#Characters
+with characters_tab:
+    render_characters_tab(sb, game_id, uid, is_dm)
 
 # Players
 with players_tab:
