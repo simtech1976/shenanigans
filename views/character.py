@@ -1,9 +1,10 @@
 import streamlit as st
-from src.character_service import load_sheet, point_balance
+from src.character_service import apply_change, load_sheet, point_balance
 from src.db import get_supabase
 from src.icons import label_html, prefetch_icons
 from tabs.players_tab import md_escape
-from src.rules import D6, describe_roll, format_change, roll, roll_notes
+from src.rules import (D6, UPGRADE_STEP ,describe_roll, format_change, format_level, 
+                       plan_upgrade, roll, roll_notes)
 
 
 sb = get_supabase()
@@ -28,6 +29,7 @@ system = game['dice_system']
 is_dm = game['dm_id'] == uid
 is_owner = character['owner_id'] == uid
 can_manage = is_dm or is_owner
+can_edit_directly = is_dm or (is_owner and game['allow_direct_edit'])
 
 
 # Header
@@ -42,9 +44,13 @@ with title_col:
         bits.append((f'Played by {md_escape(player)}'))
     bits.append(f"{md_escape(game['name'])} ({DICE_LABELS.get(system, system)})")
     st.caption(' | '.join(bits))
+balance = point_balance(sb, character_id)
+points_col.metric('Points', balance)
 
-with points_col:
-    points_col.metric('Points', point_balance(sb, character_id))
+flash = st.session_state.pop(f'flash_{character_id}', None)
+if flash:
+    st.success(flash, icon='📢')
+    st.toast(flash, icon='📢')
 
 if character.get('notes'):
     with st.expander('Notes', expanded=False):
@@ -66,23 +72,65 @@ def show_roll_result(container, stat):
     if result:
         text = f"🎲 {describe_roll(system, stat.level, result['dice'], result['total'])}"
         note = roll_notes(system, result['dice'])
-        container.markdown(f"{text}{f' ({note})' if note else ''}", unsafe_allow_html=True)
+        container.markdown(f"{text}{f' (**{note}**)' if note else ''}")
+
+
+def upgrade_control(container, stat):
+    """ Upgrade control with a confirm step for own and GM """
+    change = plan_upgrade(game, stat)
+    new_code = format_level(system, stat.level + UPGRADE_STEP)
+    cost = change.cost
+    if cost == 0 and not can_edit_directly:
+        container.button('!', key=f'up_{stat.stat_id}', disabled=True, 
+                         help='Upgrade is free but you cannot edit directly.')
+        return
+    if cost > balance:
+        container.button('! {cost}', key=f'up_{stat.stat_id}', disabled=True, 
+                         help=f'Upgrade {stat.name} to {new_code} costs {cost} points: '
+                         f'{character["name"]} has {balance}.')
+        return
+    with container.popover(f'! {cost}' if cost else '! free'):
+        st.markdown(f'Raise **{md_escape(stat.name)}** from **{stat.code}** to **{new_code}**'
+                    + (f' for **{cost} points**?' if cost else '?'))
+        if stat.is_main:
+            st.caption(f'All {md_escape(stat.name)} skills rise by the same amount.')
+        if cost:
+            st.caption(f'{balance - cost} points remaining.')
+        if st.button('Spend {cost} points' if cost else 'Upgrade', 
+                     key=f'confirm_up_{stat.stat_id}', type='primary'):
+            try:
+                apply_change(sb, character_id, change)
+            except Exception as err:
+                st.error(str(err))
+            else:
+                st.session_state[f'flash_{character_id}'] = (
+                    f'{stat.name} upgraded to {new_code}' 
+                    + (f' for {cost} points.' if cost else '.')
+                )
+                st.rerun()
+
 
 
 def stat_row(stat, main=None):
-    label_col, code_col, roll_col, result_col = st.columns([4, 1.2, 1, 4])
+    if can_manage:
+        label_col, code_col, roll_col, up_col, result_col = st.columns([4, 1.2, 1, 1.2, 3.6])
+    else:
+        label_col, code_col, roll_col, result_col = st.columns([4, 1.2, 1, 4])
     if stat.is_main:
         label_col.markdown(label_html(stat, bold=True, size=26), unsafe_allow_html=True)
-        code_col.markdown(f'**{stat.code}***', unsafe_allow_html=True)
+        code_col.markdown(f'**{stat.code}***')
     else:
         note = f'{format_change(system, stat.bonus)} over {main.name}' if stat.is_improved else None
         label = label_html(stat, bold=stat.is_improved, note=note)
         label_col.markdown(f'<div style="padding-left:1.5rem">{label}</div>', unsafe_allow_html=True)
-        code_col.markdown(f'**{stat.code}**' if stat.is_improved else f'{stat.code}', unsafe_allow_html=True)
+        code_col.markdown(f'**{stat.code}**' if stat.is_improved else f'{stat.code}')
     if roll_col.button('Roll', key=f'roll_btn_{stat.stat_id}'):
         dice, total = roll(system, stat.level)
-        st.session_state[f'roll_{character_id}_{stat.stat_id}'] = {'dice': dice, 'total': total}
+        st.session_state[f'roll_{character_id}_{stat.stat_id}'] = {
+            'dice': dice, 'total': total, 'level': stat.level}
         st.toast(f'{stat.name}: {total}', icon='🎲')
+    if can_manage:
+        upgrade_control(up_col, stat)
     show_roll_result(result_col, stat)
 
 
@@ -96,7 +144,10 @@ for main_skill, skills in sheet:
 
 if system == D6:
     st.caption('None improved skills use main stat')
-
+if can_manage:
+    unit = 'pip costs {} point(s) per die' if system == D6 else 'step costs {} point(s) per point of value'
+    st.caption(f"⬆ shows what the next step costs: each {unit.format(game.get('skill_pip_cost', 1))} "
+               f"for skills, and {game.get('main_pip_cost', 10)} for main stats.")
 
 
 # Manage
