@@ -81,6 +81,26 @@ def roll(system: str, level: int, rng: random.Ranom | None = None) -> tuple[list
     return [result], result + level
 
 
+def describe_roll(system: str, level: int, dice: list[int], total: int) -> str:
+    """ Readable dice roll info, e.g. '4 + 5 + 3 + 2 = 14 """
+    if system == D6:
+        pips = level % 3
+        parts = ' + '.join(str(d) for d in dice) or '0'
+        return f"{parts}{f' + {pips}' if pips else ''} = {total}"
+    sign = '+' if level >= 0 else '-'
+    return f'{dice[0]} {sign} {abs(level)} = {total}'
+
+
+# Will improve to show when a double is rolled
+def roll_notes(system: str, dice: list[int]) -> str | None:
+    """ Note worthy rolls such as nat20 """
+    if system == D20 and dice:
+        if dice[0] == 20:
+            return 'Natural 20!'
+        if dice[0] == 1:
+            return 'Natural 1!'
+    return None
+
 
 # Character sheet
 @dataclass
@@ -109,10 +129,10 @@ def build_sheet(game: dict, main_stat: list[dict], skills_by_main: dict[int, lis
     returns [(main_stat, skills...]), ... ] in display order. """
 
     system = game['dice_system']
-    rates = game.get('skill_pip_cose', 1), game.get('main_pip_cost', 10)
+    rates = game.get('skill_pip_cost', 1), game.get('main_pip_cost', 10)
     rows = {r['stat_id']: r for r in stat_rows}
 
-    def make(defn: dict, is_main: bool, level: int, bonus:int, main_level:int) -> SheetStat:
+    def make(defn: dict, is_main: bool, level: int, bonus: int, main_level: int) -> SheetStat:
         return SheetStat(
             stat_id=defn['id'],
             name=defn['name'],
