@@ -115,7 +115,7 @@ class SheetStat:
     main_level: int
     code: str
     next_cost: int
-    icon_emogi: str | None = None
+    icon_emoji: str | None = None
     icon_path: str | None = None
 
     @property
@@ -144,7 +144,7 @@ def build_sheet(game: dict, main_stat: list[dict], skills_by_main: dict[int, lis
             main_level=main_level,
             code=format_level(system, level),
             next_cost=upgrade_cost(system, is_main, level, *rates),
-            icon_emoji=defn.get('icon_emogi'),
+            icon_emoji=defn.get('icon_emoji'),
             icon_path=defn.get('icon_path')
         )
 

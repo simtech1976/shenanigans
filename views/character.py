@@ -26,7 +26,7 @@ character = rows[0]
 game = sb.table('games').select('*').eq('id', character['game_id']).execute().data[0]
 system = game['dice_system']
 is_dm = game['dm_id'] == uid
-is_owner = game['owner_id'] == uid
+is_owner = character['owner_id'] == uid
 can_manage = is_dm or is_owner
 
 

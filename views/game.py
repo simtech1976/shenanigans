@@ -271,7 +271,8 @@ if is_dm:
             st.caption('Use a negative number to correct a mistake.')
 
             history = (
-                sb.table('amount, reason, created_at, characters(name)')
+                sb.table('point_transactions')
+                .select('amount, reason, created_at, characters(name)')
                 .in_('character_id', ids)
                 .order('created_at', desc=True)
                 .limit(30)

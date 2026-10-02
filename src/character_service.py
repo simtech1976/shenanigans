@@ -4,7 +4,7 @@ from src.stats_manager import load_stats
 
 
 def load_sheet(sb, game: dict, character_id: int) -> list[tuple[SheetStat, list[SheetStat]]]:
-    main_stats, skills = load_stats(sb. game['id'])
+    main_stats, skills = load_stats(sb, game['id'])
     rows = (
         sb.table('character_stats')
         .select('*')

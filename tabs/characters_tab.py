@@ -1,6 +1,6 @@
 """ Characters tab on the game page: list characters and create new ones. """
 import streamlit as st
-from players_tab import md_escape
+from tabs.players_tab import md_escape
 
 
 def open_character(character_id: int):
@@ -40,7 +40,7 @@ def render_characters_tab(sb, game_id: int, uid: str, is_dm: bool):
                 try:
                     new = sb.table('characters').insert({
                         'game_id': game_id,
-                        'name': name.strip,
+                        'name': name.strip(),
                         'species': species.strip() or None,
                         'notes': notes.strip() or None
                     }).execute().data[0]
