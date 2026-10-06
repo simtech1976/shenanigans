@@ -3,8 +3,8 @@ from src.character_service import apply_change, load_sheet, point_balance
 from src.db import get_supabase
 from src.icons import label_html, prefetch_icons
 from tabs.players_tab import md_escape
-from src.rules import (D6, UPGRADE_STEP ,describe_roll, format_change, format_level, 
-                       plan_upgrade, roll, roll_notes)
+from src.rules import (D6, UPGRADE_STEP ,describe_roll, format_change, format_level,
+                       plan_sheet_edits, plan_upgrade, roll, roll_notes)
 
 
 sb = get_supabase()
