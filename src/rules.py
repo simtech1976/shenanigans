@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 D6 = 'd6'
@@ -205,3 +205,30 @@ def plan_direct_edit(game: dict, stat: SheetStat, target_level: int) -> StatChan
         cost=0,
         description=_describe(system, stat, target_level)
     )
+
+
+def plan_sheet_edits(game: dict, sheet: list[tuple[SheetStat, list[SheetStat]]],
+                     targets: dict[int. int]) -> list[StatChange]:
+    """ Plan a set of changes to a sheet, returning the list of StatChange objects """
+
+    system = game['dice_system']
+    changes: list[StatChange] = []
+    problems: list[str] = []
+    for main, skills in sheet:
+        new_main = targets.get(main.stat_id, main.level)
+        if system == D6 and new_main < 0:
+            problems.append(f'Cannot set {main.name} below 0.')
+            continue
+        if new_main != main.level:
+            changes.append(plan_direct_edit(game, main, new_main))
+        for skill in skills:
+            target = targets.get(skill.stat_id, skill.level)
+            if target == skill.main_level:
+                continue
+            if target < new_main:
+                problems.append(f'{skill.name} cannot be lower than {main.name}.')
+                continue
+            changes.append(plan_direct_edit(game, replace(skill, maoin_level=new_main), target))
+    if problems:
+        raise ValueError(' '.join(problems))
+    return changes
