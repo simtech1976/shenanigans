@@ -67,7 +67,7 @@ def bonus_for_target(main_level: int, target_level: int) -> int:
     return target_level - main_level
 
 
-def roll(system: str, level: int, rng: random.Ranom | None = None) -> tuple[list[int], int]:
+def roll(system: str, level: int, rng: random.Random | None = None) -> tuple[list[int], int]:
     """ Roll a stat ~ returns (individua dice, total) 
     D6: roll the stats dice and its pip (4D+2 -> 4 D6 + 2)
     D20: roll one D20 and the modifier (+5 -> 1d20+5) """
