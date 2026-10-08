@@ -29,7 +29,7 @@ system = game['dice_system']
 is_dm = game['dm_id'] == uid
 is_owner = character['owner_id'] == uid
 can_manage = is_dm or is_owner
-can_edit_directly = is_dm or (is_owner and game['allow_direct_edit'])
+can_edit_directly = is_dm or (is_owner and game.get('players_can_edit_sheets'))
 
 
 # Header
@@ -54,7 +54,7 @@ if flash:
 
 if character.get('notes'):
     with st.expander('Notes', expanded=False):
-        st.markdown(character['notes'], unsafe_allow_html=True)
+        st.markdown(character['notes'])
 
 if st.button('🔙 Back to game'):
     st.session_state.current_game_id = character['game_id']
@@ -134,58 +134,171 @@ def stat_row(stat, main=None):
     show_roll_result(result_col, stat)
 
 
-if not sheet:
-    st.info('No stats or skills defined for this character.')
-for main_skill, skills in sheet:
-    with st.container(border=True):
-        stat_row(main_skill)
-        for skill in skills:
-            stat_row(skill, main_skill)
+def level_input(stat, main=None) -> int:
+    """Inputs for one stat in edit mode; returns the level entered."""
+    label_col, a_col, b_col = st.columns([4, 1.5, 1.5])
+    indent = '' if stat.is_main else 'padding-left:1.6rem'
+    label_col.markdown(f'<div style="{indent}">{label_html(stat, bold=stat.is_main)}</div>',
+                       unsafe_allow_html=True)
+    key = f'edit_{character_id}_{stat.stat_id}'
+    if system == D6:
+        dice, pips = divmod(stat.level, 3)
+        d = a_col.number_input('Dice', min_value=0, max_value=30, value=dice,
+                               key=f'{key}_d', label_visibility='collapsed')
+        p = b_col.selectbox('Pips', [0, 1, 2], index=pips, key=f'{key}_p',
+                            format_func=lambda n: f'+{n}' if n else '+0',
+                            label_visibility='collapsed')
+        return int(d) * 3 + int(p)
+    return int(a_col.number_input('Value', min_value=-10, max_value=50, value=stat.level,
+                                  key=f'{key}_v', label_visibility='collapsed'))
+ 
+ 
+if st.session_state.pop(f'close_edit_{character_id}', False):
+    # After saving: leave edit mode and forget the old form values
+    st.session_state[f'edit_mode_{character_id}'] = False
+    for k in [k for k in st.session_state if str(k).startswith(f'edit_{character_id}_')]:
+        del st.session_state[k]
 
+
+
+if not sheet:
+    st.info('This game has no stats yet. The GM can add them in the **Stats & skills** tab.')
+elif can_edit_directly and st.toggle('✏️ Edit values', key=f'edit_mode_{character_id}',
+                                     help='Set values directly, without spending points.'):
+    st.caption('Set values directly, without spending points. '
+               + ('Columns are dice and pips. ' if system == D6 else '')
+               + 'A skill you leave as it is keeps moving with its main stat; '
+                 "a skill you change can't be lower than its main stat.")
+    with st.form(f'edit_values_{character_id}'):
+        targets = {}
+        for main, skills in sheet:
+            with st.container(border=True):
+                targets[main.stat_id] = level_input(main)
+                for skill in skills:
+                    targets[skill.stat_id] = level_input(skill, main)
+        save_values = st.form_submit_button('Save changes', type='primary')
+    if save_values:
+        try:
+            changes = plan_sheet_edits(game, sheet, targets)
+        except ValueError as err:
+            st.error(f'Nothing was saved: {err}.')
+        else:
+            if not changes:
+                st.info('No values were changed.')
+            else:
+                failed = None
+                for i, change in enumerate(changes):
+                    try:
+                        apply_change(sb, character_id, change)
+                    except Exception as err:
+                        failed = (i, err)
+                        break
+                if failed:
+                    i, err = failed
+                    st.error(f'Saved {i} of {len(changes)} changes, then stopped: {err}')
+                else:
+                    st.session_state[f'flash_{character_id}'] = (
+                        f'Saved {len(changes)} change{"s" if len(changes) != 1 else ""}.')
+                    st.session_state[f'close_edit_{character_id}'] = True
+                    st.rerun()
+else:
+    for main, skills in sheet:
+        with st.container(border=True):
+            stat_row(main)
+            for skill in skills:
+                stat_row(skill, main)
+ 
 if system == D6:
-    st.caption('None improved skills use main stat')
+    st.caption('Skills nobody has improved use their main stat. Improved skills are shown in bold.')
 if can_manage:
     unit = 'pip costs {} point(s) per die' if system == D6 else 'step costs {} point(s) per point of value'
     st.caption(f"⬆ shows what the next step costs: each {unit.format(game.get('skill_pip_cost', 1))} "
                f"for skills, and {game.get('main_pip_cost', 10)} for main stats.")
 
 
+# Abilities
+st.divider()
+st.subheader('Abilities')
+game_abilities = (sb.table('abilities').select('*').eq('game_id', character['game_id'])
+                  .order('name').execute().data)
+chosen_ids = {r['ability_id'] for r in sb.table('character_abilities').select('ability_id')
+              .eq('character_id', character_id).execute().data}
+chosen = [a for a in game_abilities if a['id'] in chosen_ids]
+available = [a for a in game_abilities if a['id'] not in chosen_ids]
+prefetch_icons(game_abilities)
+ 
+if not chosen:
+    st.caption(f"{md_escape(character['name'])} has no abilities yet.")
+for ab in chosen:
+    with st.container(border=True):
+        text_col, btn_col = st.columns([5, 1])
+        text_col.markdown(label_html(ab, bold=True, size=24), unsafe_allow_html=True)
+        if ab.get('description'):
+            text_col.caption(ab['description'])
+        if can_manage:
+            with btn_col.popover('Remove'):
+                st.write(f"Remove **{md_escape(ab['name'])}** from {md_escape(character['name'])}?")
+                if st.button('Remove', key=f"remove_ab_{ab['id']}", type='primary'):
+                    sb.table('character_abilities').delete() \
+                        .eq('character_id', character_id).eq('ability_id', ab['id']).execute()
+                    st.session_state[f'flash_{character_id}'] = f"{ab['name']} removed."
+                    st.rerun()
+ 
+if can_manage:
+    if not game_abilities:
+        st.caption('This game has no abilities yet. The GM can add them in the game\'s **Abilities** tab.')
+    elif not available:
+        st.caption("All of this game's abilities have been chosen.")
+    else:
+        with st.expander('➕ Add an ability'):
+            for ab in available:
+                text_col, btn_col = st.columns([5, 1])
+                text_col.markdown(label_html(ab, bold=True), unsafe_allow_html=True)
+                if ab.get('description'):
+                    text_col.caption(ab['description'])
+                if btn_col.button('Add', key=f"add_ab_{ab['id']}"):
+                    try:
+                        sb.table('character_abilities').insert(
+                            {'character_id': character_id, 'ability_id': ab['id']}).execute()
+                    except Exception as err:
+                        st.error(f'Could not add the ability: {err}')
+                    else:
+                        st.session_state[f'flash_{character_id}'] = f"{ab['name']} added."
+                        st.rerun()
+            st.caption('Everyone in the game sees abilities being added or removed in the activity feed.')
+
+ 
 # Manage
 if can_manage:
     st.divider()
-    with st.expander('Edit Details'):
+    with st.expander('Edit details'):
         with st.form('edit_character'):
-            name = st.text_input('Character Name', value=character['name'], max_chars=MAX_CHARS)
-            species = st.text_input('Species', value=character.get('species') or '', max_chars=MAX_CHARS)
-            notes = st.text_area('Notes', value=character.get('notes') or '', height=150)
+            name = st.text_input('Name', value=character['name'], max_chars=60)
+            species = st.text_input('Species', value=character.get('species') or '', max_chars=60)
+            notes = st.text_area('Notes', value=character.get('notes') or '')
             save = st.form_submit_button('Save')
         if save:
             if not name.strip():
-                st.error('Character name cannot be empty')
+                st.error('The character needs a name.')
             else:
                 try:
                     sb.table('characters').update({
                         'name': name.strip(),
                         'species': species.strip() or None,
-                        'notes': notes.strip() or None
+                        'notes': notes.strip() or None,
                     }).eq('id', character_id).execute()
-                    st.success('Character updated')
-                except Exception as e:
-                    st.error(f'Error updating character: {e}')
+                except Exception as err:
+                    st.error(f'Could not save: {err}')
                 else:
                     st.rerun()
-
-    with st.expander('Delete Character'):
-        st.warning('This will permanently delete the character and all associated data.')
-        confirm = st.checkbox('I understand that this action cannot be undone.')
-        confirm_name = st.text_input('Type the character name ({character["name"]}) to confirm deletion')
-        if confirm and confirm_name == character['name']:
-            if st.button('Delete Character', type='primary', disabled=not confirm and confirm_name == character['name']):
-                try:
-                    sb.table('characters').delete().eq('id', character_id).execute()
-                    st.success('Character deleted')
-                    st.session_state.pop('current_character_id', None)
-                    st.session_state.current_game_id = character['game_id']
-                    st.switch_page('views/game.py')
-                except Exception as e:
-                    st.error(f'Error deleting character: {e}')
+ 
+    with st.expander('Delete character'):
+        st.warning('This permanently deletes the character, including its stats, points '
+                   'history and activity entries.')
+        confirm = st.text_input(f"Type the character's name ({character['name']}) to confirm")
+        if st.button('Delete character', type='primary', disabled=confirm.strip() != character['name']):
+            sb.table('characters').delete().eq('id', character_id).execute()
+            st.session_state.pop('current_character_id', None)
+            st.session_state.current_game_id = character['game_id']
+            st.switch_page('views/game.py')
+ 
