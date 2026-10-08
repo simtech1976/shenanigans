@@ -96,7 +96,7 @@ def upgrade_control(container, stat):
             st.caption(f'All {md_escape(stat.name)} skills rise by the same amount.')
         if cost:
             st.caption(f'{balance - cost} points remaining.')
-        if st.button('Spend {cost} points' if cost else 'Upgrade', 
+        if st.button(f'Spend {cost} points' if cost else 'Upgrade', 
                      key=f'confirm_up_{stat.stat_id}', type='primary'):
             try:
                 apply_change(sb, character_id, change)
