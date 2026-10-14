@@ -1,0 +1,51 @@
+-- Update to existing DB ~ Log when a character gains or loses an ability
+create or replace function private.log_character_ability()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_cid bigint;
+  v_aid bigint;
+  v_char public.characters%rowtype;
+  v_ability text;
+  v_actor uuid := (select auth.uid());
+  v_is_gm boolean;
+  v_msg text;
+begin
+  if tg_op = 'DELETE' then
+    v_cid := old.character_id; v_aid := old.ability_id;
+  else
+    v_cid := new.character_id; v_aid := new.ability_id;
+  end if;
+
+  select * into v_char from public.characters where id = v_cid;
+  if not found then
+    return null; -- character is being deleted
+  end if;
+  select name into v_ability from public.abilities where id = v_aid;
+  if v_ability is null then
+    return null; -- ability itself is being deleted
+  end if;
+
+  v_is_gm := exists (select 1 from public.games where id = v_char.game_id and dm_id = v_actor)
+             and v_actor is distinct from v_char.owner_id;
+  v_msg := case
+    when tg_op = 'INSERT' and v_is_gm then 'GM gave ' || v_char.name || ' the ability ' || v_ability
+    when tg_op = 'INSERT' then v_char.name || ' gained the ability ' || v_ability
+    when v_is_gm then 'GM removed the ability ' || v_ability || ' from ' || v_char.name
+    else v_char.name || ' lost the ability ' || v_ability
+  end;
+
+  insert into public.game_activity (game_id, character_id, actor_id, kind, source, message)
+  values (v_char.game_id, v_cid, v_actor, 'ability',
+          case when v_is_gm then 'gm' else 'ability' end, v_msg);
+  return null;
+end;
+$$;
+
+drop trigger if exists log_character_ability on public.character_abilities;
+create trigger log_character_ability
+  after insert or delete on public.character_abilities
+  for each row execute function private.log_character_ability();
+
+revoke all on all functions in schema private from public;
+grant execute on all functions in schema private to authenticated;
