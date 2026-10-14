@@ -171,7 +171,7 @@ tabs = st.tabs(tab_names)
 notes_tab, characters_tab, players_tab, stats_tab, abilities_tab, activity_tab = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4], tabs[5]
 
 
-#Characters
+# Characters
 with characters_tab:
     render_characters_tab(sb, game_id, uid, is_dm)
 
