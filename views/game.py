@@ -207,7 +207,7 @@ with activity_tab:
             st.warning(line)
         else:
             st.write(line)
-    st.c
+    st.caption('🎯 spent points · ✏️ edited directly · 🧙 changed by GM · ⭐ points awarded · 🌟 abilities')
     
 # DM: Awarded points at the end of a session
 if is_dm:
