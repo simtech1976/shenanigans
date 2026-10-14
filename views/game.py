@@ -10,7 +10,7 @@ sb = get_supabase()
 uid = st.session_state.user.id
 
 DICE_LABELS = {'d6': 'D6 (Dice + Pips)', 'd20': 'D20 (1d20+value)'}
-SOURCE_ICONS = {'points': '🎯', 'direct': '✏️', 'gm': '🧙', 'award': '⭐'}
+SOURCE_ICONS = {'points': '🎯', 'direct': '✏️', 'gm': '🧙', 'award': '⭐', 'ability': '🌟'}
 
 game_id = st.session_state.get('current_game_id')
 if game_id is None:
@@ -207,13 +207,11 @@ with activity_tab:
             st.warning(line)
         else:
             st.write(line)
-    st.caption('🎯 spent points · ✏️ edited directly · 🧙 changed by GM · ⭐ points awarded')
+    st.c
     
-
-
 # DM: Awarded points at the end of a session
 if is_dm:
-    with tabs[4]:
+    with tabs[6]:
         characters = (
             sb.table('characters')
             .select('id, name, owner_id, profiles(username)')
