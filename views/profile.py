@@ -15,6 +15,11 @@ MAX_EMOJI_CHAR = 16
 BIO_MAX_CHAR = 500
 
 
+def _clean(value) -> str:
+    """ Added to clean up whitespace and prevent None values from being stored in the database. """
+    return (value or '').strip()
+
+
 def _friendly(err) -> str:
     text = str(err)
     if '23505' in text or 'duplicate key' in text:
@@ -57,8 +62,8 @@ if saved:
             rows = (sb.table('profiles').update({
                 'username': username,
                 'username_confirmed': True,
-                'avatar_emoji': avatar.strip() or None,
-                'bio': bio.strip() or None,
+                'avatar_emoji': _clean(avatar) or None,
+                'bio': _clean(bio) or None,
             }).eq('id', user.id).execute().data)
         except Exception as err:
             st.error(_friendly(err))
